@@ -284,11 +284,11 @@
   - [x] インターバルコールバック関連の修正
     - [x] callback_mapの構造を確認し、テストの条件を実際の実装に合わせて調整
 
-- [ ] API実行関連修正
-  - [ ] test_run_api_serverテストの修正
-    - [ ] モックの対象を正しいものに修正（api.run_api.uvicornが存在しない問題）
-  - [ ] test_run_dashboard_serverテストの修正
-    - [ ] モックの対象を正しいものに修正（api.run_api.appが存在しない問題）
+- [x] API実行関連修正
+  - [x] test_run_api_serverテストの修正
+    - [x] モックの対象を正しいものに修正（api.run_api.uvicornが存在しない問題）
+  - [x] test_run_dashboard_serverテストの修正
+    - [x] モックの対象を正しいものに修正（api.run_api.appが存在しない問題）
 
 - [x] コード非推奨警告対応
   - [x] datetime.utcnow()の使用箇所の修正
