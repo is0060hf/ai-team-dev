@@ -12,6 +12,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.routes import auth_routes, hitl_routes, hitl_interface, monitoring
 from api.error_handlers import setup_error_handlers
 from api.auth import get_current_active_user
+from api.routes.auth import router as auth_router
+from api.routes.hitl_interface import router as hitl_router
+from api.routes.monitoring import router as monitoring_router
+from api.routes.pilot_project_routes import router as pilot_project_router
 
 # アプリケーションの初期化
 app = FastAPI(
@@ -48,10 +52,10 @@ app.add_middleware(
 setup_error_handlers(app)
 
 # ルーターの登録
-app.include_router(auth_routes.router)
-app.include_router(hitl_routes.router)
-app.include_router(hitl_interface.router)
-app.include_router(monitoring.router)
+app.include_router(auth_router)
+app.include_router(hitl_router)
+app.include_router(monitoring_router)
+app.include_router(pilot_project_router)
 
 # ルートページ
 @app.get("/")
