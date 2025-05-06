@@ -34,6 +34,23 @@ class Config:
     # Web検索API設定
     SERPER_API_KEY: Optional[str] = os.getenv("SERPER_API_KEY")
 
+    # オブザーバビリティ設定
+    TRACE_LOG_SPANS: bool = os.getenv("TRACE_LOG_SPANS", "true").lower() in ("true", "1", "yes")
+    ENABLE_DEFAULT_ALERTS: bool = os.getenv("ENABLE_DEFAULT_ALERTS", "true").lower() in ("true", "1", "yes")
+    MONITORING_INTERVAL: int = int(os.getenv("MONITORING_INTERVAL", "60"))  # 秒単位
+    
+    # アラート通知設定
+    ALERT_EMAIL_ENABLED: bool = os.getenv("ALERT_EMAIL_ENABLED", "false").lower() in ("true", "1", "yes")
+    ALERT_EMAIL_SMTP_SERVER: Optional[str] = os.getenv("ALERT_EMAIL_SMTP_SERVER")
+    ALERT_EMAIL_SMTP_PORT: int = int(os.getenv("ALERT_EMAIL_SMTP_PORT", "587"))
+    ALERT_EMAIL_USERNAME: Optional[str] = os.getenv("ALERT_EMAIL_USERNAME")
+    ALERT_EMAIL_PASSWORD: Optional[str] = os.getenv("ALERT_EMAIL_PASSWORD")
+    ALERT_EMAIL_FROM: Optional[str] = os.getenv("ALERT_EMAIL_FROM")
+    ALERT_EMAIL_TO: Optional[str] = os.getenv("ALERT_EMAIL_TO")
+    
+    ALERT_SLACK_ENABLED: bool = os.getenv("ALERT_SLACK_ENABLED", "false").lower() in ("true", "1", "yes")
+    ALERT_SLACK_WEBHOOK_URL: Optional[str] = os.getenv("ALERT_SLACK_WEBHOOK_URL")
+
     @classmethod
     def validate(cls) -> bool:
         """
@@ -59,6 +76,45 @@ class Config:
         return {
             "model": cls.MODEL_NAME,
             "api_key": cls.OPENAI_API_KEY,
+        }
+    
+    @classmethod
+    def get_alert_email_config(cls) -> Dict[str, Any]:
+        """
+        アラートメール設定を辞書形式で取得します。
+        
+        Returns:
+            Dict[str, Any]: アラートメール設定の辞書
+        """
+        if not cls.ALERT_EMAIL_ENABLED:
+            return {}
+        
+        to_addrs = cls.ALERT_EMAIL_TO.split(",") if cls.ALERT_EMAIL_TO else []
+        
+        return {
+            "smtp_server": cls.ALERT_EMAIL_SMTP_SERVER,
+            "smtp_port": cls.ALERT_EMAIL_SMTP_PORT,
+            "username": cls.ALERT_EMAIL_USERNAME,
+            "password": cls.ALERT_EMAIL_PASSWORD,
+            "from_addr": cls.ALERT_EMAIL_FROM,
+            "to_addrs": to_addrs,
+            "use_tls": True
+        }
+    
+    @classmethod
+    def get_alert_slack_config(cls) -> Dict[str, Any]:
+        """
+        アラートSlack設定を辞書形式で取得します。
+        
+        Returns:
+            Dict[str, Any]: アラートSlack設定の辞書
+        """
+        if not cls.ALERT_SLACK_ENABLED:
+            return {}
+        
+        return {
+            "webhook_url": cls.ALERT_SLACK_WEBHOOK_URL,
+            "timeout": 10
         }
 
 

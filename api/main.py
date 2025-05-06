@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from starlette.middleware.sessions import SessionMiddleware
 
-from api.routes import auth_routes, hitl_routes, hitl_interface
+from api.routes import auth_routes, hitl_routes, hitl_interface, monitoring
 from api.error_handlers import setup_error_handlers
 from api.auth import get_current_active_user
 
@@ -51,6 +51,7 @@ setup_error_handlers(app)
 app.include_router(auth_routes.router)
 app.include_router(hitl_routes.router)
 app.include_router(hitl_interface.router)
+app.include_router(monitoring.router)
 
 # ルートページ
 @app.get("/")
@@ -60,7 +61,8 @@ async def root():
         "name": "Webシステム開発AIエージェントチームAPI",
         "version": "0.1.0",
         "documentation": "/docs",
-        "hitl_interface": "/hitl-ui/"
+        "hitl_interface": "/hitl-ui/",
+        "monitoring_dashboard": "/api/monitoring/dashboard"
     }
 
 
