@@ -36,12 +36,24 @@ git clone [repository_url]
 cd ai-team-dev
 ```
 
-2. 依存パッケージのインストール:
+2. Python仮想環境(venv)のセットアップ:
+```bash
+# 仮想環境の作成
+python -m venv venv
+
+# 仮想環境の有効化
+## macOSおよびLinux:
+source venv/bin/activate
+## Windows:
+venv\Scripts\activate
+```
+
+3. 依存パッケージのインストール:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 環境変数の設定:
+4. 環境変数の設定:
 ```bash
 cp .env.example .env
 # .envファイルに必要なAPIキーなどを設定してください
@@ -53,6 +65,22 @@ cp .env.example .env
 
 ```bash
 python main.py
+```
+
+### APIサーバー実行
+
+```bash
+python api/run_api.py
+```
+
+これでAPIサーバー（ポート8000）とダッシュボード（ポート8050）が起動します。
+
+### 仮想環境の停止
+
+作業終了後、仮想環境を停止するには以下のコマンドを実行します：
+
+```bash
+deactivate
 ```
 
 ### 設定オプション
