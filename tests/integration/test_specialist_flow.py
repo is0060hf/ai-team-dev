@@ -7,6 +7,8 @@ import pytest
 import os
 import json
 import time
+import threading
+import subprocess
 from unittest.mock import patch, MagicMock
 
 from utils.agent_communication import TaskStatus, TaskPriority, TaskType
@@ -28,6 +30,26 @@ def setup_temp_storage(temp_storage_dir):
     
     # 環境変数を元に戻す
     os.environ["STORAGE_DIR"] = original_storage
+
+
+@pytest.fixture
+def api_server(request):
+    """APIサーバーを起動するフィクスチャ"""
+    # APIサーバーをバックグラウンドで起動
+    process = subprocess.Popen(
+        ["python", "-m", "api.run_api", "--port", "8000"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    
+    # サーバーの起動を待機
+    time.sleep(2)
+    
+    yield process
+    
+    # テスト終了後にサーバーを終了
+    process.terminate()
+    process.wait()
 
 
 @pytest.mark.integration
@@ -211,18 +233,16 @@ class TestSpecialistWorkflow:
 class TestAPIIntegration:
     """API連携の統合テスト"""
     
-    @pytest.mark.skip(reason="Requires a running API server")
-    def test_api_server_integration(self):
+    def test_api_server_integration(self, api_server):
         """APIサーバーとの連携テスト"""
         import requests
-        import time
         
         # APIサーバーが起動していることを確認
         try:
             response = requests.get("http://localhost:8000/")
             assert response.status_code == 200
-        except requests.ConnectionError:
-            pytest.skip("APIサーバーが起動していません")
+        except requests.ConnectionError as e:
+            pytest.fail(f"APIサーバーが接続できません: {e}")
         
         # タスク作成リクエスト
         task_data = {

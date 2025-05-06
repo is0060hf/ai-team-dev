@@ -776,17 +776,24 @@ class SpecialistWorkflowAutomation:
         # 平均応答時間の計算
         response_times = []
         for task in completed_tasks:
-            created_at = datetime.datetime.fromisoformat(task.get("created_at", ""))
-            completed_at = datetime.datetime.fromisoformat(task.get("completed_at", ""))
-            response_time = (completed_at - created_at).total_seconds() / 60  # 分単位
-            response_times.append(response_time)
+            if "created_at" in task and "completed_at" in task:
+                try:
+                    created_at = datetime.datetime.fromisoformat(task.get("created_at", ""))
+                    completed_at = datetime.datetime.fromisoformat(task.get("completed_at", ""))
+                    response_time = (completed_at - created_at).total_seconds() / 60  # 分単位
+                    response_times.append(response_time)
+                except (ValueError, TypeError):
+                    # 日時の解析エラーを無視
+                    pass
         
+        # 完了タスクが空の場合のエラー回避
+        success_rate = success_count / len(completed_tasks) if completed_tasks else 0
         avg_response_time = sum(response_times) / len(response_times) if response_times else 0
         
         return {
             "active_count": len(active_tasks),
             "completed_count": len(completed_tasks),
-            "success_rate": success_count / len(completed_tasks) if completed_tasks else 0,
+            "success_rate": success_rate,
             "status_distribution": status_counts,
             "avg_response_time_minutes": avg_response_time
         }

@@ -11,6 +11,7 @@ import shutil
 import pytest
 from typing import Dict, List, Any, Callable
 from unittest.mock import MagicMock, patch
+import uuid
 
 # テスト対象モジュールをインポート
 from utils.agent_communication import (
@@ -278,132 +279,143 @@ def mock_fastapi_client():
 
 @pytest.fixture
 def sample_dashboard_data():
-    """サンプルのダッシュボードデータを提供するフィクスチャ"""
-    return {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "active_tasks_count": 3,
-        "completed_tasks_count": 2,
+    """ダッシュボードテスト用サンプルデータ"""
+    # 現在時刻をISO形式で取得
+    now = datetime.datetime.now().isoformat()
+    
+    # AI アーキテクトのデータ
+    ai_architect_active = [
+        {
+            "task_id": str(uuid.uuid4()),
+            "sender": CoreAgents.ENGINEER,
+            "recipient": SpecialistAgents.AI_ARCHITECT,
+            "task_type": TaskType.ARCHITECTURE_DESIGN.value,
+            "description": "システムアーキテクチャの設計",
+            "status": TaskStatus.IN_PROGRESS.value,
+            "created_at": now,
+            "updated_at": now,
+            "progress": 0.5
+        }
+    ]
+    
+    ai_architect_completed = [
+        {
+            "task_id": str(uuid.uuid4()),
+            "sender": CoreAgents.PL,
+            "recipient": SpecialistAgents.AI_ARCHITECT,
+            "task_type": TaskType.TECH_STACK_SELECTION.value,
+            "description": "技術スタックの選定",
+            "final_status": TaskStatus.COMPLETED.value,
+            "created_at": (datetime.datetime.now() - datetime.timedelta(days=1)).isoformat(),
+            "completed_at": now
+        }
+    ]
+    
+    # プロンプトエンジニアのデータ
+    prompt_engineer_active = [
+        {
+            "task_id": str(uuid.uuid4()),
+            "sender": CoreAgents.ENGINEER,
+            "recipient": SpecialistAgents.PROMPT_ENGINEER,
+            "task_type": TaskType.PROMPT_OPTIMIZATION.value,
+            "description": "プロンプトの最適化",
+            "status": TaskStatus.PENDING.value,
+            "created_at": now,
+            "updated_at": now
+        }
+    ]
+    
+    prompt_engineer_completed = [
+        {
+            "task_id": str(uuid.uuid4()),
+            "sender": CoreAgents.PL,
+            "recipient": SpecialistAgents.PROMPT_ENGINEER,
+            "task_type": TaskType.PROMPT_DESIGN.value,
+            "description": "プロンプトの設計",
+            "final_status": TaskStatus.COMPLETED.value,
+            "created_at": (datetime.datetime.now() - datetime.timedelta(days=2)).isoformat(),
+            "completed_at": (datetime.datetime.now() - datetime.timedelta(days=1)).isoformat()
+        }
+    ]
+    
+    # データエンジニアのデータ
+    data_engineer_active = []
+    
+    data_engineer_completed = [
+        {
+            "task_id": str(uuid.uuid4()),
+            "sender": CoreAgents.PL,
+            "recipient": SpecialistAgents.DATA_ENGINEER,
+            "task_type": TaskType.DATA_PIPELINE_DESIGN.value,
+            "description": "データパイプラインの設計",
+            "final_status": TaskStatus.COMPLETED.value,
+            "created_at": (datetime.datetime.now() - datetime.timedelta(days=3)).isoformat(),
+            "completed_at": (datetime.datetime.now() - datetime.timedelta(days=2)).isoformat()
+        }
+    ]
+    
+    # 最近のアクティビティ
+    recent_activities = [
+        {
+            "event_type": "status_update",
+            "task_id": ai_architect_active[0]["task_id"],
+            "sender": SpecialistAgents.AI_ARCHITECT,
+            "recipient": ai_architect_active[0]["sender"],
+            "status": TaskStatus.IN_PROGRESS.value,
+            "updated_at": now
+        },
+        {
+            "event_type": "task_approval",
+            "task_id": prompt_engineer_active[0]["task_id"],
+            "approver": CoreAgents.PM,
+            "updated_at": now
+        }
+    ]
+    
+    # ダッシュボードデータ
+    dashboard_data = {
+        "timestamp": now,
+        "active_tasks_count": len(ai_architect_active) + len(prompt_engineer_active) + len(data_engineer_active),
+        "completed_tasks_count": len(ai_architect_completed) + len(prompt_engineer_completed) + len(data_engineer_completed),
         "agents": {
             SpecialistAgents.AI_ARCHITECT: {
-                "active_tasks": [
-                    {
-                        "task_id": "arch_task_1",
-                        "sender": CoreAgents.ENGINEER,
-                        "recipient": SpecialistAgents.AI_ARCHITECT,
-                        "task_type": TaskType.ARCHITECTURE_DESIGN.value,
-                        "description": "クラウドアーキテクチャの設計",
-                        "status": TaskStatus.IN_PROGRESS.value,
-                        "priority": TaskPriority.HIGH.value,
-                        "created_at": datetime.datetime.now().isoformat()
-                    }
-                ],
-                "completed_tasks": [
-                    {
-                        "task_id": "arch_task_2",
-                        "sender": CoreAgents.PL,
-                        "recipient": SpecialistAgents.AI_ARCHITECT,
-                        "task_type": TaskType.TECH_STACK_SELECTION.value,
-                        "description": "WebアプリケーションのバックエンドAPIスタック選定",
-                        "status": TaskStatus.COMPLETED.value,
-                        "priority": TaskPriority.MEDIUM.value,
-                        "created_at": (datetime.datetime.now() - datetime.timedelta(days=1)).isoformat(),
-                        "completed_at": datetime.datetime.now().isoformat()
-                    }
-                ],
+                "active_tasks": ai_architect_active,
+                "completed_tasks": ai_architect_completed,
                 "stats": {
-                    "active_count": 1,
-                    "completed_count": 1,
+                    "active_count": len(ai_architect_active),
+                    "completed_count": len(ai_architect_completed),
                     "success_rate": 1.0,
-                    "status_distribution": {
-                        TaskStatus.IN_PROGRESS.value: 1
-                    },
-                    "avg_response_time_minutes": 120.5
+                    "status_distribution": {TaskStatus.IN_PROGRESS.value: 1},
+                    "avg_response_time_minutes": 60.0
                 }
             },
             SpecialistAgents.PROMPT_ENGINEER: {
-                "active_tasks": [
-                    {
-                        "task_id": "prompt_task_1",
-                        "sender": CoreAgents.ENGINEER,
-                        "recipient": SpecialistAgents.PROMPT_ENGINEER,
-                        "task_type": TaskType.PROMPT_OPTIMIZATION.value,
-                        "description": "ChatGPTプロンプトの最適化",
-                        "status": TaskStatus.PENDING.value,
-                        "priority": TaskPriority.MEDIUM.value,
-                        "created_at": datetime.datetime.now().isoformat()
-                    }
-                ],
-                "completed_tasks": [
-                    {
-                        "task_id": "prompt_task_2",
-                        "sender": CoreAgents.PDM,
-                        "recipient": SpecialistAgents.PROMPT_ENGINEER,
-                        "task_type": TaskType.PROMPT_DESIGN.value,
-                        "description": "ユーザー対応エージェント用プロンプト設計",
-                        "status": TaskStatus.COMPLETED.value,
-                        "priority": TaskPriority.HIGH.value,
-                        "created_at": (datetime.datetime.now() - datetime.timedelta(days=2)).isoformat(),
-                        "completed_at": (datetime.datetime.now() - datetime.timedelta(days=1)).isoformat()
-                    }
-                ],
+                "active_tasks": prompt_engineer_active,
+                "completed_tasks": prompt_engineer_completed,
                 "stats": {
-                    "active_count": 1,
-                    "completed_count": 1,
+                    "active_count": len(prompt_engineer_active),
+                    "completed_count": len(prompt_engineer_completed),
                     "success_rate": 1.0,
-                    "status_distribution": {
-                        TaskStatus.PENDING.value: 1
-                    },
-                    "avg_response_time_minutes": 90.2
+                    "status_distribution": {TaskStatus.PENDING.value: 1},
+                    "avg_response_time_minutes": 120.0
                 }
             },
             SpecialistAgents.DATA_ENGINEER: {
-                "active_tasks": [
-                    {
-                        "task_id": "data_task_1",
-                        "sender": CoreAgents.ENGINEER,
-                        "recipient": SpecialistAgents.DATA_ENGINEER,
-                        "task_type": TaskType.DATA_PIPELINE_DESIGN.value,
-                        "description": "顧客データETLパイプライン設計",
-                        "status": TaskStatus.WAITING_FOR_INFO.value,
-                        "priority": TaskPriority.HIGH.value,
-                        "created_at": datetime.datetime.now().isoformat()
-                    }
-                ],
-                "completed_tasks": [],
+                "active_tasks": data_engineer_active,
+                "completed_tasks": data_engineer_completed,
                 "stats": {
-                    "active_count": 1,
-                    "completed_count": 0,
-                    "success_rate": 0.0,
-                    "status_distribution": {
-                        TaskStatus.WAITING_FOR_INFO.value: 1
-                    },
-                    "avg_response_time_minutes": 0.0
+                    "active_count": len(data_engineer_active),
+                    "completed_count": len(data_engineer_completed),
+                    "success_rate": 1.0,
+                    "status_distribution": {},
+                    "avg_response_time_minutes": 180.0
                 }
             }
         },
-        "recent_activities": [
-            {
-                "task_id": "arch_task_1",
-                "sender": CoreAgents.ENGINEER,
-                "recipient": SpecialistAgents.AI_ARCHITECT,
-                "task_type": TaskType.ARCHITECTURE_DESIGN.value,
-                "description": "クラウドアーキテクチャの設計",
-                "status": TaskStatus.IN_PROGRESS.value,
-                "event_type": "status_update",
-                "updated_at": datetime.datetime.now().isoformat()
-            },
-            {
-                "task_id": "prompt_task_1",
-                "sender": CoreAgents.ENGINEER,
-                "recipient": SpecialistAgents.PROMPT_ENGINEER,
-                "task_type": TaskType.PROMPT_OPTIMIZATION.value,
-                "description": "ChatGPTプロンプトの最適化",
-                "status": TaskStatus.PENDING.value,
-                "event_type": "task_approval",
-                "updated_at": (datetime.datetime.now() - datetime.timedelta(minutes=30)).isoformat()
-            }
-        ]
+        "recent_activities": recent_activities
     }
+    
+    return dashboard_data
 
 
 @pytest.fixture
