@@ -450,12 +450,18 @@ class MessageDispatcher:
         Returns:
             Optional[str]: タスクの状態（見つからない場合はNone）
         """
+        # まずタスク応答メッセージを探す
         for queue in self._message_queues.values():
             for message in queue:
-                if message.request_id == request_id and message.message_type == "task_response":
-                    return message.content.get("status")
-                if message.request_id == request_id and message.message_type == "status_update":
-                    return message.content.get("status")
+                # タスク応答メッセージの場合
+                if message.message_type == "task_response" and (message.reference_id == request_id or message.request_id == request_id):
+                    if "status" in message.content:
+                        return message.content["status"]
+                
+                # ステータス更新メッセージの場合
+                if message.message_type == "status_update" and (message.reference_id == request_id or message.request_id == request_id):
+                    if "status" in message.content:
+                        return message.content["status"]
         
         return None
 

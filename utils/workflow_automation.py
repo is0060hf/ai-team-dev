@@ -13,7 +13,7 @@ from utils.agent_communication import (
     TaskType, TaskPriority, TaskStatus, 
     send_task_request, send_task_response, update_task_status,
     request_information, respond_to_information, get_task_status,
-    dispatcher
+    dispatcher, MessageDispatcher
 )
 from utils.logger import get_agent_logger
 
@@ -181,22 +181,31 @@ class SpecialistTaskRegistry:
             reason: 拒否理由
             rejecter: 拒否者（デフォルト: PM）
         """
+        task_info = self.get_task_info(task_id)
+        if task_info is None:
+            logger.warning(f"タスク拒否処理: タスクIDが見つかりません: {task_id}")
+            return
+            
+        # タスク情報のコピーを作成して更新
+        task_info_copy = task_info.copy() if task_info else {}
+        task_info_copy["rejected_by_pm"] = True
+        task_info_copy["rejecter"] = rejecter
+        task_info_copy["rejection_reason"] = reason
+        task_info_copy["rejected_at"] = datetime.datetime.now().isoformat()
+        
+        # アクティブタスクに存在する場合のみ更新
         if task_id in self._active_tasks:
-            self._active_tasks[task_id]["rejected_by_pm"] = True
-            self._active_tasks[task_id]["rejecter"] = rejecter
-            self._active_tasks[task_id]["rejection_reason"] = reason
-            self._active_tasks[task_id]["rejected_at"] = datetime.datetime.now().isoformat()
+            self._active_tasks[task_id].update(task_info_copy)
             
-            # 状態を拒否に更新
-            self.update_task_status(task_id, TaskStatus.REJECTED.value)
-            
-            # 履歴に拒否イベントを追加
-            self._task_history.append({
-                **self._active_tasks[task_id],
-                "event_type": "task_rejection"
-            })
-            
-            logger.info(f"タスクが拒否されました: {task_id} (拒否者: {rejecter}, 理由: {reason})")
+        # 状態を拒否に更新
+        self.update_task_status(task_id, TaskStatus.REJECTED.value)
+        
+        # 履歴に拒否イベントを追加
+        rejection_event = task_info_copy.copy()
+        rejection_event["event_type"] = "task_rejection"  # 明示的にイベント種別を設定
+        self._task_history.append(rejection_event)
+        
+        logger.info(f"タスクが拒否されました: {task_id} (拒否者: {rejecter}, 理由: {reason})")
     
     def set_task_result(self, task_id: str, result: Dict[str, Any], attachments: Optional[List[str]] = None) -> None:
         """

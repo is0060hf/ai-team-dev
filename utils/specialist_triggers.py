@@ -54,6 +54,7 @@ class SpecialistTriggerPatterns:
         r"(?:プロンプト|指示)の(?:精度|効率)(?:向上|改善)",
         r"(?:AI|モデル|LLM)の(?:応答|出力)(?:精度|品質)(?:向上|改善)",
         r"(?:トークン|コスト)(?:最適化|削減)",
+        r"指示を最適化",  # 「LLMへの指示を最適化」をマッチさせるため追加
         
         # プロンプト評価関連
         r"プロンプト(?:評価|テスト|分析)",
@@ -113,10 +114,10 @@ class SpecialistTriggerAnalyzer:
         self.prompt_engineer_patterns = [re.compile(pattern) for pattern in SpecialistTriggerPatterns.PROMPT_ENGINEER_PATTERNS]
         self.data_engineer_patterns = [re.compile(pattern) for pattern in SpecialistTriggerPatterns.DATA_ENGINEER_PATTERNS]
         
-        # エージェント固有の閾値（0.0〜1.0）
-        self.ai_architect_threshold = 0.6
-        self.prompt_engineer_threshold = 0.6
-        self.data_engineer_threshold = 0.6
+        # エージェント固有の閾値（0.0〜1.0）- 閾値を下げて専門エージェントが起動しやすくする
+        self.ai_architect_threshold = 0.4
+        self.prompt_engineer_threshold = 0.4
+        self.data_engineer_threshold = 0.4
     
     def analyze_request(self, request_text: str, context: Optional[Dict[str, Any]] = None) -> Tuple[bool, Optional[str], float]:
         """
@@ -180,9 +181,13 @@ class SpecialistTriggerAnalyzer:
         for pattern in patterns:
             if pattern.search(text):
                 match_count += 1
-        
-        # 単純なスコア計算：一致パターン数 / 総パターン数
-        confidence = min(1.0, match_count / 3)  # 3つ以上のパターンに一致すれば最高スコア
+                
+        # マッチがあれば、より緩やかなスコア計算を適用
+        if match_count > 0:
+            # 1つのパターンマッチでも最低0.4のスコアを与え、2つ以上で高いスコアを与える
+            confidence = 0.4 + min(0.6, (match_count - 1) * 0.3)
+        else:
+            confidence = 0.0
         
         return confidence
     

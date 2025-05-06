@@ -176,22 +176,22 @@
   - [x] 負荷テスト
 
 ### テスト修正タスク
-- [ ] utils/agent_communication.py の修正
-  - [ ] タスク状態取得機能の修正（get_task_status）
-  - [ ] StatusUpdateからのタスク状態取得機能の修正
-  - [ ] メッセージキュー管理の改善
+- [x] utils/agent_communication.py の修正
+  - [x] タスク状態取得機能の修正（get_task_status）
+  - [x] StatusUpdateからのタスク状態取得機能の修正
+  - [x] メッセージキュー管理の改善
 
-- [ ] utils/specialist_triggers.py の修正
-  - [ ] PROMPT_ENGINEER_PATTERNSのパターンマッチング修正（「LLMへの指示を最適化」などが正しくマッチするよう修正）
-  - [ ] 専門エージェント判定ロジックの改善（analyze_request）
-  - [ ] 信頼度計算ロジック（_calculate_confidence）の調整
-  - [ ] スコア閾値の再検討
+- [x] utils/specialist_triggers.py の修正
+  - [x] PROMPT_ENGINEER_PATTERNSのパターンマッチング修正（「LLMへの指示を最適化」などが正しくマッチするよう修正）
+  - [x] 専門エージェント判定ロジックの改善（analyze_request）
+  - [x] 信頼度計算ロジック（_calculate_confidence）の調整
+  - [x] スコア閾値の再検討
 
-- [ ] utils/workflow_automation.py の修正
-  - [ ] タスク拒否処理（reject_task）のバグ修正
-  - [ ] タスク登録/管理の堅牢性向上
-  - [ ] MessageDispatcherのインポート問題解決
-  - [ ] SpecialistWorkflowAutomation初期化処理の修正
+- [x] utils/workflow_automation.py の修正
+  - [x] タスク拒否処理（reject_task）のバグ修正
+  - [x] タスク登録/管理の堅牢性向上
+  - [x] MessageDispatcherのインポート問題解決
+  - [x] SpecialistWorkflowAutomation初期化処理の修正
 
 - [ ] APIテスト環境の整備
   - [ ] 必要な依存パッケージのインストール（selenium等）
