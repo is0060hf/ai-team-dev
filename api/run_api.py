@@ -47,7 +47,7 @@ def run_dashboard_server(port: int = 8050, host: str = "0.0.0.0", debug: bool = 
     """
     from api.dashboard import app
     
-    logger.info(f"専門エージェントモニタリングダッシュボードを起動します: {host}:{port}")
+    logger.info(f"専門エージェント活用状況モニタリングダッシュボードを起動します: {host}:{port}")
     app.run(debug=debug, host=host, port=port)
 
 
@@ -126,7 +126,7 @@ def run_servers_subprocess(api_port: int = 8000, dashboard_port: int = 8050, deb
         processes.append(api_process)
         
         # ダッシュボードサーバーを起動
-        logger.info(f"専門エージェントモニタリングダッシュボードを起動します: ポート {dashboard_port}")
+        logger.info(f"専門エージェント活用状況モニタリングダッシュボードを起動します: ポート {dashboard_port}")
         dashboard_process = subprocess.Popen(dashboard_cmd)
         processes.append(dashboard_process)
         

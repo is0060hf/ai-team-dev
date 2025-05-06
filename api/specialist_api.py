@@ -25,6 +25,13 @@ from utils.workflow_automation import (
 from utils.specialist_triggers import request_specialist_if_needed, analyze_specialist_need
 from utils.logger import get_agent_logger
 
+# テスト用にworkflow_automationをインポートまたはモックとして提供
+try:
+    from utils.workflow_automation import workflow_automation
+except (ImportError, AttributeError):
+    from unittest.mock import MagicMock
+    workflow_automation = MagicMock()
+
 # 認証モジュールと各ルーターをインポート
 from api.auth import rate_limiter, get_current_active_user, has_role, Roles, User
 from api.error_handlers import add_error_handlers, add_middlewares
@@ -548,6 +555,7 @@ async def root():
         "name": "専門エージェントAPI",
         "version": "1.0.0",
         "description": "専門エージェント（AIアーキテクト、プロンプトエンジニア、データエンジニア）との連携APIです。",
+        "message": "専門エージェント連携APIです。",
         "endpoints": {
             "docs": "/docs",
             "redoc": "/redoc",

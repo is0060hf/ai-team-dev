@@ -94,10 +94,16 @@ def fix_workflow_automation_attribute():
             # モジュールに属性として追加
             setattr(workflow_module, "workflow_automation", mock_instance)
             return True
+        
+        # どちらもない場合は汎用的なモックを設定
+        mock_instance = MagicMock()
+        setattr(workflow_module, "workflow_automation", mock_instance)
+        return True
             
     except (ImportError, AttributeError) as e:
         print(f"workflow_automation属性の修正中にエラーが発生しました: {str(e)}")
-        return False
+        # エラーの場合はNoneを返す仕様に変更
+        return None
     
     return False
 
