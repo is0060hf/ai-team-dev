@@ -12,6 +12,10 @@ if [ -z "$VIRTUAL_ENV" ]; then
     fi
 fi
 
+# PYTHONPATHにカレントディレクトリを追加
+export PYTHONPATH=$PYTHONPATH:.
+echo "PYTHONPATH=$PYTHONPATH"
+
 # pytestがインストールされているか確認
 if ! command -v pytest &> /dev/null; then
     echo "pytestをインストールします..."
