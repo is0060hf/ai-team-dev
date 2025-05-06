@@ -20,7 +20,7 @@ API_BASE_URL = "http://localhost:8000"  # APIサーバーのURL
 # アプリケーションの初期化
 app = dash.Dash(
     __name__,
-    title="専門エージェントモニタリングダッシュボード",
+    title="専門エージェント活用状況モニタリングダッシュボード",
     external_stylesheets=[
         "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap"
     ]

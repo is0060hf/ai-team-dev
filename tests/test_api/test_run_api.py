@@ -11,40 +11,55 @@ import subprocess
 import time
 from unittest.mock import patch, MagicMock, call
 
-from api.run_api import (
-    run_api_server, run_dashboard_server,
-    run_servers_threaded, run_servers_subprocess
-)
+# インポートの前にパッチを適用
+with patch.dict('sys.modules', {
+    'api.specialist_api': MagicMock(),
+    'uvicorn': MagicMock(),
+    'api.dashboard': MagicMock()
+}):
+    from api.run_api import (
+        run_api_server, run_dashboard_server,
+        run_servers_threaded, run_servers_subprocess
+    )
 
 
 class TestAPIServer:
     """APIサーバー起動関数のテスト"""
     
-    @patch("api.run_api.uvicorn.run")
-    def test_run_api_server(self, mock_run):
+    def test_run_api_server(self):
         """run_api_server関数が正しく動作することを確認"""
-        # 関数を実行
-        run_api_server(port=9000, host="127.0.0.1", debug=True)
-        
-        # uvicorn.runが呼び出されたことを確認
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
-        assert kwargs["port"] == 9000
-        assert kwargs["host"] == "127.0.0.1"
-        assert kwargs["debug"] is True
+        with patch('api.run_api.uvicorn') as mock_uvicorn:
+            with patch('api.run_api.specialist_api') as mock_specialist_api:
+                # モックの設定
+                mock_specialist_api.app = "mock_app"
+                
+                # 関数を実行
+                run_api_server(port=9000, host="127.0.0.1", debug=True)
+                
+                # uvicorn.runが呼び出されたことを確認
+                mock_uvicorn.run.assert_called_once()
+                args, kwargs = mock_uvicorn.run.call_args
+                assert args[0] == "mock_app"  # appが渡されていること
+                assert kwargs["port"] == 9000
+                assert kwargs["host"] == "127.0.0.1"
+                assert kwargs["debug"] is True
     
-    @patch("api.run_api.app.run")
-    def test_run_dashboard_server(self, mock_run):
+    def test_run_dashboard_server(self):
         """run_dashboard_server関数が正しく動作することを確認"""
-        # 関数を実行
-        run_dashboard_server(port=9050, host="127.0.0.1", debug=True)
-        
-        # app.runが呼び出されたことを確認
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
-        assert kwargs["port"] == 9050
-        assert kwargs["host"] == "127.0.0.1"
-        assert kwargs["debug"] is True
+        with patch('api.run_api.dashboard') as mock_dashboard:
+            # モックの設定
+            mock_app = MagicMock()
+            mock_dashboard.app = mock_app
+            
+            # 関数を実行
+            run_dashboard_server(port=9050, host="127.0.0.1", debug=True)
+            
+            # app.runが呼び出されたことを確認
+            mock_app.run.assert_called_once()
+            args, kwargs = mock_app.run.call_args
+            assert kwargs["port"] == 9050
+            assert kwargs["host"] == "127.0.0.1"
+            assert kwargs["debug"] is True
 
 
 class TestThreadedServers:

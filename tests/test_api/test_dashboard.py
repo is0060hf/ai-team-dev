@@ -7,6 +7,7 @@ import pytest
 import json
 import datetime
 from unittest.mock import patch, MagicMock
+import requests
 
 import dash
 
@@ -80,6 +81,7 @@ class TestDashboardData:
         # モックの設定（エラー応答）
         mock_response = MagicMock()
         mock_response.status_code = 500
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("Internal Server Error")
         mock_get.return_value = mock_response
         
         # 関数を呼び出し
@@ -120,7 +122,12 @@ class TestDashboardCallbacks:
         mock_fetch.return_value = mock_dashboard_data
         
         # アプリのコールバックを確認
-        assert "auto-refresh.n_intervals" in app.callback_map or "refresh-button.n_clicks" in app.callback_map
+        assert "dashboard-data.data" in app.callback_map
+        
+        # dashboard-data.dataコールバックの入力に自動更新インターバルが含まれていることを確認
+        inputs = app.callback_map["dashboard-data.data"]["inputs"]
+        input_ids = [input_item["id"] for input_item in inputs]
+        assert "auto-refresh" in input_ids
         
         # コールバック関数を直接呼び出し
         result = update_dashboard_data(10, 5)

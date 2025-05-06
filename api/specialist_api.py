@@ -3,21 +3,37 @@
 UIからの要求を受け付け、専門エージェントとの連携を行います。
 """
 
+import os
+import sys
+import datetime
+import uuid
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Union
+
 from fastapi import FastAPI, HTTPException, Depends, Request, Body, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import Dict, List, Any, Optional, Union
-import uuid
-import datetime
-import os
+
+# ルートディレクトリをパスに追加
+sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.workflow_automation import (
     SpecialistAgents, CoreAgents, TaskType, TaskPriority, TaskStatus,
     task_registry, get_dashboard_data
 )
 from utils.specialist_triggers import request_specialist_if_needed, analyze_specialist_need
+from utils.logger import get_agent_logger
 
+# 認証モジュールと各ルーターをインポート
+from api.auth import rate_limiter, get_current_active_user, has_role, Roles, User
+from api.error_handlers import add_error_handlers, add_middlewares
+from api.routes import auth_routes, hitl_routes
+from api.openapi_docs import customize_openapi_docs
+
+logger = get_agent_logger("specialist_api")
+
+# FastAPIアプリケーションの初期化
 app = FastAPI(
     title="専門エージェントAPI",
     description="専門エージェント（AIアーキテクト、プロンプトエンジニア、データエンジニア）との連携APIです。",
@@ -32,6 +48,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# エラーハンドラとミドルウェアの追加
+add_error_handlers(app)
+add_middlewares(app)
+
+# OpenAPIドキュメントのカスタマイズ
+customize_openapi_docs(
+    app,
+    title="専門エージェントAPI",
+    description="""
+    # 専門エージェント連携API
+    
+    このAPIは、専門エージェント（AIアーキテクト、プロンプトエンジニア、データエンジニア）との連携を提供します。
+    
+    ## 機能
+    
+    * 専門エージェントへのタスク依頼
+    * 要求分析
+    * タスク管理
+    * ダッシュボードデータの取得
+    * 認証・認可
+    * HITL（Human-in-the-loop）インターフェース
+    
+    ## 認証
+    
+    すべてのAPIエンドポイントは、JWT Bearer認証が必要です。認証トークンを取得するには、`/auth/token`エンドポイントを使用してください。
+    """,
+    version="1.0.0"
+)
+
+# ルーターの追加
+app.include_router(auth_routes.router)
+app.include_router(hitl_routes.router)
 
 
 # リクエストモデル
@@ -116,8 +165,11 @@ class DashboardDataModel(BaseModel):
 
 
 # エンドポイント
-@app.post("/specialist/request", response_model=SpecialistResponseModel)
-async def request_specialist(request: SpecialistRequestModel):
+@app.post("/specialist/request", response_model=SpecialistResponseModel, dependencies=[Depends(rate_limiter.limiter_dependency)])
+async def request_specialist(
+    request: SpecialistRequestModel,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     専門エージェントにタスクを依頼します。
     専門エージェントタイプが指定されていない場合は要求内容から自動判断します。
@@ -127,6 +179,9 @@ async def request_specialist(request: SpecialistRequestModel):
         context = request.context or {}
         if request.specialist_type:
             context["specialist_type"] = request.specialist_type
+        
+        # ユーザー情報をコンテキストに追加
+        context["requested_by_user"] = current_user.username
         
         # 専門エージェントにタスクを依頼
         task_id = request_specialist_if_needed(
@@ -160,14 +215,18 @@ async def request_specialist(request: SpecialistRequestModel):
         )
         
     except Exception as e:
+        logger.error(f"タスク依頼中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"エラーが発生しました: {str(e)}"
         )
 
 
-@app.post("/specialist/analyze", response_model=AnalysisResultModel)
-async def analyze_request(request: AnalyzeRequestModel):
+@app.post("/specialist/analyze", response_model=AnalysisResultModel, dependencies=[Depends(rate_limiter.limiter_dependency)])
+async def analyze_request(
+    request: AnalyzeRequestModel,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     要求テキストを分析し、専門エージェントが必要かどうかを判断します。
     """
@@ -197,14 +256,20 @@ async def analyze_request(request: AnalyzeRequestModel):
         )
         
     except Exception as e:
+        logger.error(f"要求分析中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"分析中にエラーが発生しました: {str(e)}"
         )
 
 
-@app.get("/specialist/tasks", response_model=List[TaskInfoModel])
-async def get_tasks(specialist: Optional[str] = None, status: Optional[str] = None, limit: int = 50):
+@app.get("/specialist/tasks", response_model=List[TaskInfoModel], dependencies=[Depends(rate_limiter.limiter_dependency)])
+async def get_tasks(
+    specialist: Optional[str] = None, 
+    status: Optional[str] = None, 
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     専門エージェントタスクのリストを取得します。
     """
@@ -253,14 +318,18 @@ async def get_tasks(specialist: Optional[str] = None, status: Optional[str] = No
         return result
         
     except Exception as e:
+        logger.error(f"タスク一覧取得中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク取得中にエラーが発生しました: {str(e)}"
         )
 
 
-@app.get("/specialist/task/{task_id}", response_model=TaskInfoModel)
-async def get_task(task_id: str):
+@app.get("/specialist/task/{task_id}", response_model=TaskInfoModel, dependencies=[Depends(rate_limiter.limiter_dependency)])
+async def get_task(
+    task_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     """
     特定のタスク情報を取得します。
     """
@@ -293,6 +362,7 @@ async def get_task(task_id: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"タスク情報取得中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク情報取得中にエラーが発生しました: {str(e)}"
@@ -300,7 +370,11 @@ async def get_task(task_id: str):
 
 
 @app.post("/specialist/task/{task_id}/update", response_model=TaskInfoModel)
-async def update_task_status(task_id: str, update: TaskStatusUpdateModel):
+async def update_task_status(
+    task_id: str, 
+    update: TaskStatusUpdateModel,
+    current_user: User = Depends(has_role([Roles.ADMIN, Roles.MANAGER, Roles.PM, Roles.SPECIALIST]))
+):
     """
     タスクのステータスを更新します。
     """
@@ -339,6 +413,7 @@ async def update_task_status(task_id: str, update: TaskStatusUpdateModel):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"タスク状態更新中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク状態更新中にエラーが発生しました: {str(e)}"
@@ -346,7 +421,11 @@ async def update_task_status(task_id: str, update: TaskStatusUpdateModel):
 
 
 @app.post("/specialist/task/{task_id}/approve", response_model=TaskInfoModel)
-async def approve_task(task_id: str, approval: TaskApprovalModel):
+async def approve_task(
+    task_id: str, 
+    approval: TaskApprovalModel,
+    current_user: User = Depends(has_role([Roles.ADMIN, Roles.MANAGER, Roles.PM]))
+):
     """
     PMがタスクを承認または拒否します。
     """
@@ -360,14 +439,14 @@ async def approve_task(task_id: str, approval: TaskApprovalModel):
         
         # 承認または拒否
         if approval.approved:
-            task_registry.approve_task(task_id, approval.approver)
+            task_registry.approve_task(task_id, current_user.username)
         else:
             if not approval.rejection_reason:
                 raise HTTPException(
                     status_code=400,
                     detail="タスクを拒否する場合は拒否理由を指定してください。"
                 )
-            task_registry.reject_task(task_id, approval.rejection_reason, approval.approver)
+            task_registry.reject_task(task_id, approval.rejection_reason, current_user.username)
         
         # 更新後のタスク情報を取得
         updated_task_info = task_registry.get_task_info(task_id)
@@ -393,6 +472,7 @@ async def approve_task(task_id: str, approval: TaskApprovalModel):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"タスク承認中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク承認中にエラーが発生しました: {str(e)}"
@@ -400,7 +480,9 @@ async def approve_task(task_id: str, approval: TaskApprovalModel):
 
 
 @app.get("/specialist/dashboard", response_model=DashboardDataModel)
-async def get_dashboard():
+async def get_dashboard(
+    current_user: User = Depends(get_current_active_user)
+):
     """
     専門エージェントのダッシュボードデータを取得します。
     """
@@ -409,6 +491,7 @@ async def get_dashboard():
         return dashboard_data
         
     except Exception as e:
+        logger.error(f"ダッシュボードデータ取得中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"ダッシュボードデータ取得中にエラーが発生しました: {str(e)}"
@@ -416,7 +499,9 @@ async def get_dashboard():
 
 
 @app.post("/specialist/save")
-async def save_tasks():
+async def save_tasks(
+    current_user: User = Depends(has_role([Roles.ADMIN, Roles.MANAGER]))
+):
     """
     タスク情報をファイルに保存します。
     """
@@ -425,6 +510,7 @@ async def save_tasks():
         return {"message": "タスク情報を保存しました。"}
         
     except Exception as e:
+        logger.error(f"タスク情報保存中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク情報保存中にエラーが発生しました: {str(e)}"
@@ -432,7 +518,9 @@ async def save_tasks():
 
 
 @app.post("/specialist/load")
-async def load_tasks():
+async def load_tasks(
+    current_user: User = Depends(has_role([Roles.ADMIN, Roles.MANAGER]))
+):
     """
     ファイルからタスク情報を読み込みます。
     """
@@ -444,10 +532,28 @@ async def load_tasks():
             return {"message": "タスク情報の読み込みに失敗しました。"}
         
     except Exception as e:
+        logger.error(f"タスク情報読み込み中にエラーが発生: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"タスク情報読み込み中にエラーが発生しました: {str(e)}"
         )
+
+
+@app.get("/")
+async def root():
+    """
+    APIルートエンドポイント。API情報を返します。
+    """
+    return {
+        "name": "専門エージェントAPI",
+        "version": "1.0.0",
+        "description": "専門エージェント（AIアーキテクト、プロンプトエンジニア、データエンジニア）との連携APIです。",
+        "endpoints": {
+            "docs": "/docs",
+            "redoc": "/redoc",
+            "openapi": "/openapi.json"
+        }
+    }
 
 
 if __name__ == "__main__":
