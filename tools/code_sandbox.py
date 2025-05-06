@@ -8,8 +8,13 @@ import sys
 import subprocess
 import tempfile
 import traceback
+import venv
+import json
+import shutil
+import re
 from typing import Dict, Any, Optional, List, Tuple
 from contextlib import contextmanager
+from pathlib import Path
 
 from crewai.tools import BaseTool
 from utils.logger import logger
@@ -70,6 +75,207 @@ class CodeExecutionTool(BaseTool):
                 os.unlink(temp_file_path)
             except Exception:
                 pass
+
+
+class DependencyManagedCodeSandbox(BaseTool):
+    """依存関係管理を含むコード実行サンドボックス"""
+    
+    name: str = "依存関係管理コード実行"
+    description: str = "Python依存関係を管理し、指定されたコードを仮想環境で実行します。"
+    
+    def __init__(self, sandbox_dir: Optional[str] = None, allowed_packages: Optional[List[str]] = None):
+        """
+        依存関係管理コード実行サンドボックスを初期化します。
+        
+        Args:
+            sandbox_dir: サンドボックス環境のディレクトリパス（省略時は一時ディレクトリ）
+            allowed_packages: インストールを許可するパッケージのリスト（省略時は安全なパッケージのみ）
+        """
+        super().__init__()
+        
+        self.sandbox_dir = sandbox_dir or tempfile.mkdtemp(prefix="aidevteam_sandbox_")
+        self.venv_dir = os.path.join(self.sandbox_dir, "venv")
+        self.code_dir = os.path.join(self.sandbox_dir, "code")
+        self.pip_cache_dir = os.path.join(self.sandbox_dir, "pip_cache")
+        
+        # 許可するパッケージのリスト
+        self.allowed_packages = allowed_packages or [
+            "numpy", "pandas", "matplotlib", "seaborn", "scikit-learn", 
+            "requests", "beautifulsoup4", "flask", "django", "fastapi", 
+            "pytest", "sqlalchemy", "pillow", "plotly", "dash", "streamlit",
+            "jinja2", "pyyaml", "toml", "rich", "tqdm", "uvicorn", "pytest-mock",
+            "aiohttp", "pytest-asyncio", "httpx", "starlette", "arrow", "pendulum"
+        ]
+        
+        # サンドボックス環境を初期化
+        self._initialize_sandbox()
+    
+    def _initialize_sandbox(self) -> None:
+        """サンドボックス環境を初期化する"""
+        logger.info(f"サンドボックス環境を初期化しています: {self.sandbox_dir}")
+        
+        # 必要なディレクトリを作成
+        os.makedirs(self.code_dir, exist_ok=True)
+        os.makedirs(self.pip_cache_dir, exist_ok=True)
+        
+        # 仮想環境を作成
+        if not os.path.exists(self.venv_dir):
+            venv.create(self.venv_dir, with_pip=True)
+            logger.info(f"仮想環境を作成しました: {self.venv_dir}")
+    
+    def _get_venv_python(self) -> str:
+        """仮想環境のPythonインタプリタパスを取得"""
+        if sys.platform == "win32":
+            return os.path.join(self.venv_dir, "Scripts", "python.exe")
+        return os.path.join(self.venv_dir, "bin", "python")
+    
+    def _get_venv_pip(self) -> str:
+        """仮想環境のpipコマンドパスを取得"""
+        if sys.platform == "win32":
+            return os.path.join(self.venv_dir, "Scripts", "pip.exe")
+        return os.path.join(self.venv_dir, "bin", "pip")
+    
+    def _install_dependencies(self, requirements: List[str]) -> Tuple[bool, str]:
+        """
+        依存パッケージをインストールする
+        
+        Args:
+            requirements: インストールするパッケージのリスト
+        
+        Returns:
+            bool: インストール成功したかどうか
+            str: インストール結果メッセージ
+        """
+        # 安全でないパッケージをフィルタリング
+        filtered_requirements = []
+        skipped_packages = []
+        
+        for req in requirements:
+            # バージョン指定をパースしてパッケージ名を取得
+            package_name = re.split(r'[=<>]', req)[0].strip()
+            
+            if package_name in self.allowed_packages:
+                filtered_requirements.append(req)
+            else:
+                skipped_packages.append(req)
+        
+        # 要件がない場合は早期リターン
+        if not filtered_requirements:
+            if skipped_packages:
+                return False, f"エラー: 安全でないため、以下のパッケージはインストールされませんでした: {', '.join(skipped_packages)}"
+            return True, "依存パッケージはありません。"
+        
+        # requirements.txtファイルを作成
+        req_file_path = os.path.join(self.code_dir, "requirements.txt")
+        with open(req_file_path, "w") as f:
+            f.write("\n".join(filtered_requirements))
+        
+        # パッケージをインストール
+        try:
+            result = subprocess.run(
+                [
+                    self._get_venv_pip(),
+                    "install",
+                    "-r", req_file_path,
+                    "--cache-dir", self.pip_cache_dir,
+                    "--no-warn-script-location"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=180,  # 3分のタイムアウト
+                check=False
+            )
+            
+            if result.returncode == 0:
+                success_msg = f"以下のパッケージが正常にインストールされました: {', '.join(filtered_requirements)}"
+                if skipped_packages:
+                    success_msg += f"\n安全でないため、以下のパッケージはスキップされました: {', '.join(skipped_packages)}"
+                return True, success_msg
+            else:
+                return False, f"パッケージのインストールに失敗しました:\n{result.stderr}"
+        
+        except subprocess.TimeoutExpired:
+            return False, "パッケージインストールがタイムアウトしました（180秒）。"
+        except Exception as e:
+            return False, f"パッケージインストール中にエラーが発生しました: {str(e)}"
+    
+    def _run(self, code: str, requirements: str = "", timeout: int = 30) -> str:
+        """
+        依存関係を管理して、Pythonコードを仮想環境で実行します。
+        
+        Args:
+            code: 実行するPythonコード
+            requirements: 必要な依存パッケージのリスト（各行に1パッケージ）またはJSON形式の配列
+            timeout: 実行タイムアウト秒数（デフォルト: 30秒）
+            
+        Returns:
+            str: 実行結果または実行エラーメッセージ
+        """
+        logger.info("依存関係管理コード実行ツールが呼び出されました。")
+        
+        # 依存パッケージリストをパース
+        try:
+            if requirements.strip().startswith("[") and requirements.strip().endswith("]"):
+                # JSON形式の場合
+                packages = json.loads(requirements)
+            else:
+                # 単純なテキスト形式の場合
+                packages = [pkg.strip() for pkg in requirements.split("\n") if pkg.strip()]
+        except json.JSONDecodeError:
+            # JSONのパースに失敗した場合は単純な行分割
+            packages = [pkg.strip() for pkg in requirements.split("\n") if pkg.strip()]
+        
+        # 依存パッケージをインストール
+        success, install_message = self._install_dependencies(packages)
+        
+        # コードを一時ファイルに書き込む
+        code_file_path = os.path.join(self.code_dir, "script.py")
+        with open(code_file_path, "w") as f:
+            f.write(code)
+        
+        results = []
+        results.append(f"==== 依存パッケージ管理 ====\n{install_message}\n")
+        
+        try:
+            # 仮想環境でコードを実行
+            result = subprocess.run(
+                [self._get_venv_python(), code_file_path],
+                cwd=self.code_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False
+            )
+            
+            # 標準出力と標準エラー出力を取得
+            stdout = result.stdout
+            stderr = result.stderr
+            
+            # 実行結果のフォーマット
+            if result.returncode == 0:
+                results.append(f"==== 実行成功（終了コード: 0）====\n{stdout}\n")
+            else:
+                results.append(f"==== 実行失敗（終了コード: {result.returncode}）====\n{stderr}\n\n==== 出力 ====\n{stdout}\n")
+            
+            return "\n".join(results)
+        except subprocess.TimeoutExpired:
+            results.append(f"エラー: コードの実行がタイムアウトしました（{timeout}秒を超過）。")
+            return "\n".join(results)
+        except Exception as e:
+            results.append(f"エラー: コードの実行中に例外が発生しました: {str(e)}")
+            return "\n".join(results)
+    
+    def cleanup(self) -> None:
+        """サンドボックス環境を削除する"""
+        try:
+            shutil.rmtree(self.sandbox_dir)
+            logger.info(f"サンドボックス環境を削除しました: {self.sandbox_dir}")
+        except Exception as e:
+            logger.error(f"サンドボックス環境の削除中にエラーが発生しました: {str(e)}")
+    
+    def __del__(self):
+        """デストラクタ：インスタンス破棄時にクリーンアップ"""
+        self.cleanup()
 
 
 class UnitTestTool(BaseTool):
@@ -153,6 +359,107 @@ class UnitTestTool(BaseTool):
             return True
         except Exception:
             return False
+
+
+class DependencyManagedUnitTestTool(BaseTool):
+    """依存関係管理を含むユニットテスト実行ツール"""
+    
+    name: str = "依存関係管理ユニットテスト実行"
+    description: str = "依存関係を管理して、ユニットテストを仮想環境で実行します。"
+    
+    def __init__(self, sandbox_dir: Optional[str] = None, allowed_packages: Optional[List[str]] = None):
+        """
+        依存関係管理ユニットテスト実行ツールを初期化します。
+        
+        Args:
+            sandbox_dir: サンドボックス環境のディレクトリパス（省略時は一時ディレクトリ）
+            allowed_packages: インストールを許可するパッケージのリスト（省略時は安全なパッケージのみ）
+        """
+        super().__init__()
+        
+        # サンドボックス環境を共有するために、依存関係管理コード実行ツールを内部で使用
+        self.sandbox = DependencyManagedCodeSandbox(sandbox_dir, allowed_packages)
+    
+    def _run(self, test_code: str, requirements: str = "", timeout: int = 30) -> str:
+        """
+        依存関係を管理して、ユニットテストを仮想環境で実行します。
+        
+        Args:
+            test_code: 実行するユニットテストコード（unittest形式またはpytest形式）
+            requirements: 必要な依存パッケージのリスト（各行に1パッケージ）またはJSON形式の配列
+            timeout: 実行タイムアウト秒数（デフォルト: 30秒）
+            
+        Returns:
+            str: テスト実行結果またはエラーメッセージ
+        """
+        logger.info("依存関係管理ユニットテスト実行ツールが呼び出されました。")
+        
+        # 依存パッケージリストをパース
+        try:
+            if requirements.strip().startswith("[") and requirements.strip().endswith("]"):
+                # JSON形式の場合
+                packages = json.loads(requirements)
+            else:
+                # 単純なテキスト形式の場合
+                packages = [pkg.strip() for pkg in requirements.split("\n") if pkg.strip()]
+        except json.JSONDecodeError:
+            # JSONのパースに失敗した場合は単純な行分割
+            packages = [pkg.strip() for pkg in requirements.split("\n") if pkg.strip()]
+        
+        # pytestを依存パッケージリストに追加
+        if "pytest" not in packages:
+            packages.append("pytest")
+        
+        # 依存パッケージをインストール
+        success, install_message = self.sandbox._install_dependencies(packages)
+        
+        # テストコードを一時ファイルに書き込む
+        test_file_path = os.path.join(self.sandbox.code_dir, "test_script.py")
+        with open(test_file_path, "w") as f:
+            f.write(test_code)
+        
+        results = []
+        results.append(f"==== 依存パッケージ管理 ====\n{install_message}\n")
+        
+        try:
+            # 仮想環境でpytestを実行
+            result = subprocess.run(
+                [
+                    self.sandbox._get_venv_python(),
+                    "-m", "pytest", "-v", test_file_path
+                ],
+                cwd=self.sandbox.code_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False
+            )
+            
+            # 標準出力と標準エラー出力を取得
+            stdout = result.stdout
+            stderr = result.stderr
+            
+            # テスト結果のフォーマット
+            if result.returncode == 0:
+                results.append(f"==== テスト成功（全テスト通過）====\n{stdout}\n")
+            else:
+                results.append(f"==== テスト失敗（一部テストに失敗）====\n{stdout}\n\n==== エラー ====\n{stderr}\n")
+            
+            return "\n".join(results)
+        except subprocess.TimeoutExpired:
+            results.append(f"エラー: テスト実行がタイムアウトしました（{timeout}秒を超過）。")
+            return "\n".join(results)
+        except Exception as e:
+            results.append(f"エラー: テスト実行中に例外が発生しました: {str(e)}")
+            return "\n".join(results)
+    
+    def cleanup(self) -> None:
+        """サンドボックス環境を削除する"""
+        self.sandbox.cleanup()
+    
+    def __del__(self):
+        """デストラクタ：インスタンス破棄時にクリーンアップ"""
+        self.cleanup()
 
 
 class CodeAnalysisTool(BaseTool):
