@@ -51,6 +51,14 @@ class TaskType(Enum):
     DATA_TRANSFORMATION = "データ変換"
     DATA_PIPELINE_DESIGN = "データパイプライン設計"
     
+    # ベクトルデータベース関連タスク（新規追加）
+    VECTOR_DB_SETUP = "ベクトルDB構築"
+    VECTOR_DB_OPTIMIZATION = "ベクトルDB最適化"
+    EMBEDDING_GENERATION = "エンベディング生成"
+    SIMILARITY_SEARCH = "類似性検索実装"
+    KNOWLEDGE_BASE_DESIGN = "知識ベース設計"
+    RAG_IMPLEMENTATION = "RAG実装"
+    
     # 共通タスク
     CONSULTATION = "相談・アドバイス"
     REVIEW = "レビュー"

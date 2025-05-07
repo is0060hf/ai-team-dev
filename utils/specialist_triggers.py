@@ -97,7 +97,19 @@ class SpecialistTriggerPatterns:
         r"(?:データベース|DB)(?:設計|構築|最適化)",
         r"(?:データモデル|スキーマ)(?:設計|構築)",
         r"(?:ベクトルDB|ベクトルデータベース)(?:構築|設計|利用)",
-        r"データ(?:保存|保管|アーカイブ)(?:方法|戦略)"
+        r"データ(?:保存|保管|アーカイブ)(?:方法|戦略)",
+        
+        # ベクトルデータベース関連（新規追加）
+        r"(?:エンベディング|埋め込み)(?:生成|作成|計算)",
+        r"(?:ベクトル|埋め込み)検索",
+        r"(?:意味的|セマンティック)検索",
+        r"類似(?:文書|テキスト|データ)検索",
+        r"(?:RAG|検索拡張生成)(?:システム|機能|パイプライン)(?:構築|実装|設計)",
+        r"(?:文書|テキスト|データ)の(?:ベクトル化|埋め込み)",
+        r"(?:ChromaDB|Pinecone|Weaviate|Milvus|pgvector)(?:連携|設定|構築)",
+        r"(?:近傍|k-NN|kNN)検索(?:実装|設計)",
+        r"(?:知識ベース|ナレッジベース)(?:構築|設計|実装|連携)",
+        r"エージェント(?:知識|情報)共有(?:機能|システム|仕組み)"
     ]
 
 
@@ -252,7 +264,25 @@ class SpecialistTriggerAnalyzer:
                 return TaskType.CONSULTATION
                 
         elif agent == SpecialistAgents.DATA_ENGINEER:
-            if "抽出" in lower_text or "取得" in lower_text:
+            # ベクトルデータベース関連タスクの判定（優先順位を高くする）
+            if "ベクトルdb" in lower_text or "ベクトルデータベース" in lower_text or "chromadb" in lower_text or "pinecone" in lower_text or "weaviate" in lower_text:
+                if "構築" in lower_text or "設定" in lower_text or "セットアップ" in lower_text:
+                    return TaskType.VECTOR_DB_SETUP
+                elif "最適化" in lower_text or "改善" in lower_text or "チューニング" in lower_text:
+                    return TaskType.VECTOR_DB_OPTIMIZATION
+                else:
+                    return TaskType.VECTOR_DB_SETUP
+            elif "エンベディング" in lower_text or "埋め込み" in lower_text:
+                return TaskType.EMBEDDING_GENERATION
+            elif "rag" in lower_text or "検索拡張生成" in lower_text:
+                return TaskType.RAG_IMPLEMENTATION
+            elif "類似" in lower_text or "近傍" in lower_text or "類似性検索" in lower_text:
+                return TaskType.SIMILARITY_SEARCH
+            elif "知識ベース" in lower_text or "ナレッジベース" in lower_text:
+                return TaskType.KNOWLEDGE_BASE_DESIGN
+            
+            # 既存のデータエンジニア関連タスクの判定
+            elif "抽出" in lower_text or "取得" in lower_text:
                 return TaskType.DATA_EXTRACTION
             elif "クリーニング" in lower_text or "洗浄" in lower_text:
                 return TaskType.DATA_CLEANING
