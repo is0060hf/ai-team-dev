@@ -1,0 +1,43 @@
+{
+  "name": "AI Team Dev Environment",
+  "dockerComposeFile": "../docker-compose.dev.yml",
+  "service": "dev-container",
+  "workspaceFolder": "/workspace",
+  
+  "settings": {
+    "python.defaultInterpreterPath": "/usr/local/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.formatting.provider": "black",
+    "python.formatting.blackPath": "/usr/local/bin/black",
+    "python.formatting.blackArgs": ["--line-length", "100"],
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.nosetestsEnabled": false,
+    "python.testing.pytestArgs": ["tests"]
+  },
+  
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-azuretools.vscode-docker",
+    "visualstudioexptteam.vscodeintellicode",
+    "streetsidesoftware.code-spell-checker",
+    "eamodio.gitlens"
+  ],
+  
+  "forwardPorts": [8000, 8050, 8051, 8052, 8053, 8054, 8055],
+  
+  "remoteUser": "vscode",
+  
+  "features": {
+    "git": "latest",
+    "github-cli": "latest",
+    "python": "3.10"
+  },
+  
+  "postCreateCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt"
+} 

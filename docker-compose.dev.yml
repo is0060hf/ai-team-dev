@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  dev-container:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace:cached
+      - ./artifacts:/workspace/artifacts
+      - ./logs:/workspace/logs
+      - ./storage:/workspace/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/workspace
+    ports:
+      - "8000:8000"  # API Server
+      - "8050:8050"  # Main Dashboard
+      - "8051:8051"  # Scaling Dashboard
+      - "8052:8052"  # Metrics Dashboard
+      - "8053:8053"  # Traces Dashboard
+      - "8054:8054"  # Logs Dashboard
+      - "8055:8055"  # Alerts Dashboard
+    command: sleep infinity
+  
+  # ベクトルデータベース（ChromaDB）
+  vector-db:
+    image: ghcr.io/chroma-core/chroma:latest
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data/vector_db:/chroma/chroma
+    environment:
+      - CHROMA_DB_IMPL=duckdb+parquet
+      - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s 
