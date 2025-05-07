@@ -17,6 +17,14 @@ from contextlib import contextmanager
 from utils.logger import get_structured_logger, StructuredLogger
 from utils.config import config
 
+# trace_storageモジュールをインポート
+try:
+    from utils.trace_storage import get_trace_storage, get_exporter
+except ImportError:
+    # trace_storageモジュールがない場合は動作継続できるようにする
+    get_trace_storage = None
+    get_exporter = None
+
 # 型変数の定義
 T = TypeVar('T')
 
@@ -25,6 +33,9 @@ logger = get_structured_logger("tracing")
 
 # グローバルトレース情報を保持するスレッドローカルストレージ
 _trace_context = threading.local()
+
+# エクスポーターのキャッシュ
+_exporters = {}
 
 
 class SpanContext:
@@ -93,6 +104,16 @@ class Tracer:
         self.active_spans: Dict[str, List[SpanContext]] = {}  # trace_id -> [active_spans]
         self.log_spans = config.TRACE_LOG_SPANS
         self._trace_logger = get_structured_logger(f"trace.{service_name}")
+        
+        # 外部ストレージの設定
+        self.external_storage_enabled = getattr(config, "ENABLE_EXTERNAL_TRACE_STORAGE", False)
+        self.storage = get_trace_storage() if get_trace_storage and self.external_storage_enabled else None
+        
+        # トレースデータのエクスポート設定
+        self.export_enabled = getattr(config, "ENABLE_TRACE_EXPORT", False) and bool(get_exporter)
+        self.export_batch_size = getattr(config, "TRACE_EXPORT_BATCH_SIZE", 10)
+        self.export_queue = []
+        self.export_lock = threading.Lock()
     
     def start_trace(
         self, 
@@ -306,6 +327,14 @@ class Tracer:
         # スパン情報をログに記録（設定されている場合）
         if self.log_spans:
             self._log_span(span)
+        
+        # 外部ストレージに保存
+        if self.storage:
+            self._store_span(span)
+        
+        # トレース全体が終了した場合（ルートスパンが終了した場合）
+        if self.export_enabled and not span.parent_span_id:
+            self._queue_trace_for_export(span.trace_id)
     
     def add_event(
         self, 
@@ -414,6 +443,85 @@ class Tracer:
             f"({trace_info['duration_ms']:.2f}ms, {len(trace_spans)}スパン)",
             context={"trace": trace_info}
         )
+    
+    def _store_span(self, span: SpanContext):
+        """
+        スパン情報を外部ストレージに保存
+        
+        Args:
+            span: スパンコンテキスト
+        """
+        if not self.storage:
+            return
+        
+        try:
+            self.storage.store_span(span)
+            
+            # ルートスパンの場合はトレース情報も保存
+            if not span.parent_span_id:
+                self.storage.store_trace(span.trace_id, span)
+        except Exception as e:
+            logger.error(f"スパン情報の保存に失敗しました: {str(e)}")
+    
+    def _queue_trace_for_export(self, trace_id: str):
+        """
+        トレースをエクスポートキューに追加
+        
+        Args:
+            trace_id: トレースID
+        """
+        if not self.export_enabled or not self.storage:
+            return
+        
+        with self.export_lock:
+            self.export_queue.append(trace_id)
+            
+            # キューサイズがバッチサイズを超えたらエクスポート
+            if len(self.export_queue) >= self.export_batch_size:
+                self._export_traces()
+    
+    def _export_traces(self):
+        """キューに入っているトレースをエクスポート"""
+        if not self.export_enabled or not self.storage or not get_exporter:
+            return
+        
+        with self.export_lock:
+            if not self.export_queue:
+                return
+            
+            trace_ids = self.export_queue.copy()
+            self.export_queue.clear()
+        
+        # 設定されたエクスポーターでトレースをエクスポート
+        exporters_config = getattr(config, "TRACE_EXPORTERS", [])
+        
+        for exporter_config in exporters_config:
+            exporter_type = exporter_config.get("type")
+            if not exporter_type:
+                continue
+            
+            # エクスポーターを取得または初期化
+            exporter_key = json.dumps(exporter_config, sort_keys=True)
+            if exporter_key not in _exporters:
+                exporter_params = {k: v for k, v in exporter_config.items() if k != "type"}
+                _exporters[exporter_key] = get_exporter(exporter_type, **exporter_params)
+            
+            exporter = _exporters[exporter_key]
+            if not exporter:
+                continue
+            
+            # トレースをエクスポート
+            exported_count = 0
+            for trace_id in trace_ids:
+                try:
+                    trace = self.storage.get_trace(trace_id)
+                    if trace and exporter.export_trace(trace):
+                        exported_count += 1
+                except Exception as e:
+                    logger.error(f"トレース {trace_id} のエクスポートに失敗しました: {str(e)}")
+            
+            if exported_count > 0:
+                logger.info(f"{exported_count}件のトレースを {exporter_type} にエクスポートしました")
 
 
 # グローバルトレーサーインスタンス
@@ -523,4 +631,10 @@ def set_span_attribute(key: str, value: Any):
     """
     current_span = getattr(_trace_context, "current_span", None)
     if current_span:
-        current_span.attributes[key] = value 
+        current_span.attributes[key] = value
+
+
+def export_pending_traces():
+    """保留中のトレースをエクスポート"""
+    if hasattr(tracer, "_export_traces"):
+        tracer._export_traces() 
