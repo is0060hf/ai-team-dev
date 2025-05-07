@@ -1,0 +1,252 @@
+version: '3.8'
+
+services:
+  # メインAIエージェントアプリケーション
+  main-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-team-main-app
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKFLOW_TYPE=full
+      # APIサービスとの接続
+      - API_HOST=api-server
+      - API_PORT=8000
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    depends_on:
+      - api-server
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/app/logs/main.log') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 専門エージェント連携APIサーバー
+  api-server:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    container_name: ai-team-api-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      # ベクトルDBとの接続設定
+      - VECTOR_DB_HOST=vector-db
+      - VECTOR_DB_PORT=8080
+      # メトリクス送信先
+      - METRICS_HOST=metrics-service
+      - METRICS_PORT=9090
+      # トレース送信先
+      - TRACE_HOST=traces-service
+      - TRACE_PORT=4317
+      # ログ送信先
+      - LOG_HOST=logs-service
+      - LOG_PORT=9200
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ダッシュボードサーバー
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: ai-team-dashboard
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DASHBOARD_TYPE=dashboard
+      # APIサーバーとの接続設定
+      - API_HOST=api-server
+      - API_PORT=8000
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    depends_on:
+      - api-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # エージェントスケーリングダッシュボード
+  scaling-dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: ai-team-scaling-dashboard
+    ports:
+      - "8051:8050"
+    volumes:
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DASHBOARD_TYPE=scaling
+      # APIサーバーとの接続設定
+      - API_HOST=api-server
+      - API_PORT=8000
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    depends_on:
+      - api-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # メトリクス収集・表示サービス
+  metrics-service:
+    build:
+      context: .
+      dockerfile: docker/observability/Dockerfile
+    container_name: ai-team-metrics-service
+    ports:
+      - "9090:9090"  # Prometheus互換エンドポイント
+      - "8052:8050"  # メトリクスダッシュボード
+    volumes:
+      - ./logs:/app/logs
+      - ./data/metrics:/app/data/metrics
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OBSERVABILITY_SERVICE=metrics
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # トレース収集・表示サービス
+  traces-service:
+    build:
+      context: .
+      dockerfile: docker/observability/Dockerfile
+    container_name: ai-team-traces-service
+    ports:
+      - "4317:4317"  # OpenTelemetry OTLP/gRPCエンドポイント
+      - "8053:8050"  # トレースダッシュボード
+    volumes:
+      - ./logs:/app/logs
+      - ./data/traces:/app/data/traces
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OBSERVABILITY_SERVICE=traces
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ログ収集・表示サービス
+  logs-service:
+    build:
+      context: .
+      dockerfile: docker/observability/Dockerfile
+    container_name: ai-team-logs-service
+    ports:
+      - "9200:9200"  # Elasticsearch互換エンドポイント
+      - "8054:8050"  # ログダッシュボード
+    volumes:
+      - ./logs:/app/logs
+      - ./data/logs:/app/data/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OBSERVABILITY_SERVICE=logs
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # アラート管理・表示サービス
+  alerts-service:
+    build:
+      context: .
+      dockerfile: docker/observability/Dockerfile
+    container_name: ai-team-alerts-service
+    ports:
+      - "9093:9093"  # Alertmanager互換エンドポイント
+      - "8055:8050"  # アラートダッシュボード
+    volumes:
+      - ./logs:/app/logs
+      - ./data/alerts:/app/data/alerts
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OBSERVABILITY_SERVICE=alerts
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    depends_on:
+      - metrics-service
+      - traces-service
+      - logs-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ベクトルデータベース（ChromaDB）
+  vector-db:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: ai-team-vector-db
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data/vector_db:/chroma/chroma
+    environment:
+      - CHROMA_DB_IMPL=duckdb+parquet
+      - CHROMA_PERSIST_DIRECTORY=/chroma/chroma
+    networks:
+      - ai-team-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  ai-team-network:
+    driver: bridge 

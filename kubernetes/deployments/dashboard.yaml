@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-dashboard
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-dashboard
+    component: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-dashboard
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-team-dashboard
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8050"
+    spec:
+      containers:
+      - name: dashboard
+        image: ${REGISTRY_URL}/ai-team-dashboard:latest
+        imagePullPolicy: Always
+        env:
+        - name: DASHBOARD_TYPE
+          value: "dashboard"
+        ports:
+        - containerPort: 8050
+          name: http
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: storage
+          mountPath: /app/storage
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8050
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8050
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: storage
+        persistentVolumeClaim:
+          claimName: ai-team-storage-pvc 

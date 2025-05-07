@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-api-server
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-api-server
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-team-api-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-team-api-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+      - name: api-server
+        image: ${REGISTRY_URL}/ai-team-api-server:latest
+        imagePullPolicy: Always
+        command: ["python", "-m", "api.run_api", "--api-port", "8000"]
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        - secretRef:
+            name: api-keys
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: storage
+          mountPath: /app/storage
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: storage
+        persistentVolumeClaim:
+          claimName: ai-team-storage-pvc 

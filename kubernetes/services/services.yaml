@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-main-app
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-main-app
+spec:
+  selector:
+    app: ai-team-main-app
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-api-server
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-api-server
+spec:
+  selector:
+    app: ai-team-api-server
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-dashboard
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-dashboard
+spec:
+  selector:
+    app: ai-team-dashboard
+  ports:
+  - port: 8050
+    targetPort: 8050
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-metrics-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-metrics-service
+spec:
+  selector:
+    app: ai-team-metrics-service
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: metrics
+  - port: 8050
+    targetPort: 8050
+    name: dashboard
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-traces-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-traces-service
+spec:
+  selector:
+    app: ai-team-traces-service
+  ports:
+  - port: 4317
+    targetPort: 4317
+    name: otlp
+  - port: 8050
+    targetPort: 8050
+    name: dashboard
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-logs-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-logs-service
+spec:
+  selector:
+    app: ai-team-logs-service
+  ports:
+  - port: 9200
+    targetPort: 9200
+    name: elasticsearch
+  - port: 8050
+    targetPort: 8050
+    name: dashboard
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-alerts-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-alerts-service
+spec:
+  selector:
+    app: ai-team-alerts-service
+  ports:
+  - port: 9093
+    targetPort: 9093
+    name: alertmanager
+  - port: 8050
+    targetPort: 8050
+    name: dashboard
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-team-vector-db
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-vector-db
+spec:
+  selector:
+    app: ai-team-vector-db
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+  clusterIP: None  # ヘッドレスサービス 

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-specific-config
+  namespace: ai-team-dev
+data:
+  # メインアプリケーション設定
+  WORKFLOW_TYPE: "full"
+  AGENT_COUNT: "3"
+  
+  # ダッシュボード関連設定
+  DASHBOARD_UPDATE_INTERVAL: "10"
+  DASHBOARD_THEME: "light"
+  
+  # オブザーバビリティ関連設定
+  LOG_LEVEL: "INFO"
+  METRICS_INTERVAL: "30"
+  TRACE_SAMPLE_RATE: "0.1"
+  ALERT_THRESHOLD_CPU: "80"
+  ALERT_THRESHOLD_MEMORY: "80"
+  
+  # ベクトルDB関連設定
+  CHROMA_DB_IMPL: "duckdb+parquet"
+  CHROMA_PERSIST_DIRECTORY: "/chroma/chroma" 

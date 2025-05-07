@@ -1,0 +1,99 @@
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: ai-team-dev-vpc
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  description: "AIエージェントチーム開発用VPCネットワーク"
+  autoCreateSubnetworks: false
+  routingMode: REGIONAL
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeSubnetwork
+metadata:
+  name: ai-team-dev-subnet
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  description: "AIエージェントチーム開発用サブネット"
+  ipCidrRange: "10.0.0.0/20"
+  region: asia-northeast1
+  privateIpGoogleAccess: true
+  networkRef:
+    name: ai-team-dev-vpc
+  secondaryIpRange:
+  - rangeName: "pods"
+    ipCidrRange: "10.4.0.0/14"
+  - rangeName: "services"
+    ipCidrRange: "10.8.0.0/20"
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRouter
+metadata:
+  name: ai-team-dev-router
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  description: "AIエージェントチーム開発用ルーター"
+  region: asia-northeast1
+  networkRef:
+    name: ai-team-dev-vpc
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRouterNAT
+metadata:
+  name: ai-team-dev-nat
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  region: asia-northeast1
+  natIpAllocateOption: AUTO_ONLY
+  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+  routerRef:
+    name: ai-team-dev-router
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: ai-team-dev-allow-internal
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  description: "クラスタ内部通信を許可"
+  networkRef:
+    name: ai-team-dev-vpc
+  priority: 1000
+  direction: INGRESS
+  sourceRanges:
+  - "10.0.0.0/20"
+  - "10.4.0.0/14"
+  - "10.8.0.0/20"
+  allowed:
+  - protocol: tcp
+  - protocol: udp
+  - protocol: icmp
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: ai-team-dev-allow-health-checks
+  namespace: ai-team-dev-infra
+  annotations:
+    cnrm.cloud.google.com/project-id: "ai-team-dev-project"
+spec:
+  description: "GCPヘルスチェックを許可"
+  networkRef:
+    name: ai-team-dev-vpc
+  priority: 1000
+  direction: INGRESS
+  sourceRanges:
+  - "35.191.0.0/16"
+  - "130.211.0.0/22"
+  allowed:
+  - protocol: tcp 

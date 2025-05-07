@@ -544,26 +544,26 @@
   - [x] スケーリング操作のロールバック機能実装
 
 ### コンテナ・クラウド環境対応タスク
-- [ ] コンテナ化実装
-  - [ ] 各コンポーネント用Dockerfileの作成
-  - [ ] docker-compose.yml設定ファイルの作成
-  - [ ] コンテナ間通信設定の実装
-  - [ ] コンテナヘルスチェック機能実装
-  - [ ] コンテナログ収集設定の実装
+- [x] コンテナ化実装
+  - [x] 各コンポーネント用Dockerfileの作成
+  - [x] docker-compose.yml設定ファイルの作成
+  - [x] コンテナ間通信設定の実装
+  - [x] コンテナヘルスチェック機能実装
+  - [x] コンテナログ収集設定の実装
 
-- [ ] Kubernetes環境構築
-  - [ ] Kubernetesマニフェストファイル（Deployment、Service等）の作成
-  - [ ] StatefulSet設定の実装（状態保持が必要なコンポーネント用）
-  - [ ] ConfigMap・Secret管理の実装
-  - [ ] Ingressコントローラー設定の実装
-  - [ ] Horizontal Pod Autoscaler設定の実装
+- [x] Kubernetes環境構築
+  - [x] Kubernetesマニフェストファイル（Deployment、Service等）の作成
+  - [x] StatefulSet設定の実装（状態保持が必要なコンポーネント用）
+  - [x] ConfigMap・Secret管理の実装
+  - [x] Ingressコントローラー設定の実装
+  - [x] Horizontal Pod Autoscaler設定の実装
 
-- [ ] クラウドサービス連携
-  - [ ] GCP Cloud Storage連携の実装
-  - [ ] GCP Secret Manager連携の実装
-  - [ ] Cloud SQLまたはNeon DB連携の実装
-  - [ ] Vercelデプロイメント設定の実装
-  - [ ] クラウドサービス間のVPC接続設定
+- [x] クラウドサービス連携
+  - [x] GCP Cloud Storage連携の実装
+  - [x] GCP Secret Manager連携の実装
+  - [x] Cloud SQLまたはNeon DB連携の実装
+  - [x] Vercelデプロイメント設定の実装
+  - [x] クラウドサービス間のVPC接続設定
 
 ### API接続セキュリティ対策タスク
 - [ ] APIキー管理強化

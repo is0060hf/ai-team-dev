@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ai-team-vector-db
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-vector-db
+    component: database
+spec:
+  serviceName: ai-team-vector-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-vector-db
+  template:
+    metadata:
+      labels:
+        app: ai-team-vector-db
+    spec:
+      containers:
+      - name: vector-db
+        image: ghcr.io/chroma-core/chroma:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        env:
+        - name: CHROMA_DB_IMPL
+          value: "duckdb+parquet"
+        - name: CHROMA_PERSIST_DIRECTORY
+          value: "/chroma/chroma"
+        volumeMounts:
+        - name: vector-db-data
+          mountPath: /chroma/chroma
+        livenessProbe:
+          httpGet:
+            path: /api/v1/heartbeat
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/heartbeat
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+  volumeClaimTemplates:
+  - metadata:
+      name: vector-db-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 10Gi 

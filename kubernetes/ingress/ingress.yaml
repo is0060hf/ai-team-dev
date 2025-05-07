@@ -1,0 +1,84 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-team-ingress
+  namespace: ai-team-dev
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - api.ai-team-dev.example.com
+    - dashboard.ai-team-dev.example.com
+    - metrics.ai-team-dev.example.com
+    - traces.ai-team-dev.example.com
+    - logs.ai-team-dev.example.com
+    - alerts.ai-team-dev.example.com
+    secretName: ai-team-tls-cert
+  rules:
+  - host: api.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-api-server
+            port:
+              number: 8000
+  - host: dashboard.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-dashboard
+            port:
+              number: 8050
+  - host: metrics.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-metrics-service
+            port:
+              number: 8050
+  - host: traces.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-traces-service
+            port:
+              number: 8050
+  - host: logs.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-logs-service
+            port:
+              number: 8050
+  - host: alerts.ai-team-dev.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-team-alerts-service
+            port:
+              number: 8050 

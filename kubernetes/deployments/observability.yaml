@@ -1,0 +1,251 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-metrics-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-metrics-service
+    component: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-metrics-service
+  template:
+    metadata:
+      labels:
+        app: ai-team-metrics-service
+    spec:
+      containers:
+      - name: metrics-service
+        image: ${REGISTRY_URL}/ai-team-observability:latest
+        imagePullPolicy: Always
+        env:
+        - name: OBSERVABILITY_SERVICE
+          value: "metrics"
+        ports:
+        - containerPort: 9090
+          name: metrics
+        - containerPort: 8050
+          name: dashboard
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: metrics-data
+          mountPath: /app/data/metrics
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: metrics-data
+        persistentVolumeClaim:
+          claimName: ai-team-metrics-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-traces-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-traces-service
+    component: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-traces-service
+  template:
+    metadata:
+      labels:
+        app: ai-team-traces-service
+    spec:
+      containers:
+      - name: traces-service
+        image: ${REGISTRY_URL}/ai-team-observability:latest
+        imagePullPolicy: Always
+        env:
+        - name: OBSERVABILITY_SERVICE
+          value: "traces"
+        ports:
+        - containerPort: 4317
+          name: otlp
+        - containerPort: 8050
+          name: dashboard
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: traces-data
+          mountPath: /app/data/traces
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: traces-data
+        persistentVolumeClaim:
+          claimName: ai-team-traces-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-logs-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-logs-service
+    component: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-logs-service
+  template:
+    metadata:
+      labels:
+        app: ai-team-logs-service
+    spec:
+      containers:
+      - name: logs-service
+        image: ${REGISTRY_URL}/ai-team-observability:latest
+        imagePullPolicy: Always
+        env:
+        - name: OBSERVABILITY_SERVICE
+          value: "logs"
+        ports:
+        - containerPort: 9200
+          name: elasticsearch
+        - containerPort: 8050
+          name: dashboard
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: logs-data
+          mountPath: /app/data/logs
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: logs-data
+        persistentVolumeClaim:
+          claimName: ai-team-logs-data-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-team-alerts-service
+  namespace: ai-team-dev
+  labels:
+    app: ai-team-alerts-service
+    component: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-team-alerts-service
+  template:
+    metadata:
+      labels:
+        app: ai-team-alerts-service
+    spec:
+      containers:
+      - name: alerts-service
+        image: ${REGISTRY_URL}/ai-team-observability:latest
+        imagePullPolicy: Always
+        env:
+        - name: OBSERVABILITY_SERVICE
+          value: "alerts"
+        ports:
+        - containerPort: 9093
+          name: alertmanager
+        - containerPort: 8050
+          name: dashboard
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+        envFrom:
+        - configMapRef:
+            name: common-config
+        - configMapRef:
+            name: app-specific-config
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: alerts-data
+          mountPath: /app/data/alerts
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ai-team-logs-pvc
+      - name: alerts-data
+        persistentVolumeClaim:
+          claimName: ai-team-alerts-pvc 
