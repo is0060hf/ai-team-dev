@@ -748,6 +748,25 @@ class OpenTelemetryExporter:
         self.endpoint = endpoint
         self.headers = headers or {}
         self.url = f"http://{host}:{port}{endpoint}"
+        
+        # OpenTelemetryのモジュールを動的にインポートしようとする
+        self.use_native_export = False
+        try:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.sdk.resources import Resource
+            
+            # ネイティブのOTLPエクスポーターを使用
+            self.use_native_export = True
+            self.otlp_exporter = OTLPSpanExporter(
+                endpoint=self.url,
+                headers=self.headers
+            )
+            
+            logger.info("OpenTelemetry OTLPエクスポーターのネイティブ実装を使用します")
+        except ImportError:
+            logger.warning("OpenTelemetryパッケージが見つかりません。HTTP APIを使用してエクスポートします")
     
     def export_trace(self, trace: Dict[str, Any]) -> bool:
         """
@@ -759,8 +778,101 @@ class OpenTelemetryExporter:
         Returns:
             bool: 送信が成功したらTrue
         """
+        if self.use_native_export:
+            try:
+                from opentelemetry import trace as otel_trace
+                from opentelemetry.trace import SpanContext, SpanKind, TraceFlags
+                from opentelemetry.sdk.trace import ReadableSpan
+                from opentelemetry.trace.span import Status, StatusCode
+                from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+                
+                # トレース情報からOpenTelemetryスパンを構築
+                otel_spans = []
+                
+                for span in trace.get("spans", []):
+                    # トレースIDとスパンIDをバイトに変換
+                    trace_id_int = int(trace["trace_id"].replace("-", ""), 16)
+                    span_id_int = int(span["span_id"].replace("-", ""), 16)
+                    
+                    # 親スパンIDの設定
+                    parent_span_id = 0
+                    if span.get("parent_span_id"):
+                        parent_span_id = int(span["parent_span_id"].replace("-", ""), 16)
+                    
+                    # スパンコンテキストの作成
+                    span_context = SpanContext(
+                        trace_id=trace_id_int,
+                        span_id=span_id_int,
+                        is_remote=False,
+                        trace_flags=TraceFlags(1),  # サンプリングフラグをオン
+                    )
+                    
+                    # スパン種別の決定
+                    span_kind = SpanKind.INTERNAL
+                    span_kind_str = span.get("attributes", {}).get("span.kind", "internal").lower()
+                    if span_kind_str == "server":
+                        span_kind = SpanKind.SERVER
+                    elif span_kind_str == "client":
+                        span_kind = SpanKind.CLIENT
+                    elif span_kind_str == "producer":
+                        span_kind = SpanKind.PRODUCER
+                    elif span_kind_str == "consumer":
+                        span_kind = SpanKind.CONSUMER
+                    
+                    # スパン名
+                    span_name = span.get("name", "unknown")
+                    
+                    # 時間情報（ナノ秒に変換）
+                    start_time = int(span["start_time"] * 1_000_000_000)
+                    end_time = int(span["end_time"] * 1_000_000_000) if span["end_time"] else None
+                    
+                    # 属性
+                    attributes = {k: v for k, v in span.get("attributes", {}).items()}
+                    
+                    # イベント
+                    events = []
+                    for event in span.get("events", []):
+                        events.append({
+                            "name": event["name"],
+                            "timestamp": int(event["timestamp"] * 1_000_000_000),
+                            "attributes": event.get("attributes", {})
+                        })
+                    
+                    # スパンステータス
+                    status = Status(StatusCode.OK)
+                    if span.get("attributes", {}).get("error", False):
+                        status = Status(
+                            StatusCode.ERROR,
+                            span.get("attributes", {}).get("error.message", "エラーが発生しました")
+                        )
+                    
+                    # ReadableSpanの代わりに辞書を使用
+                    otel_span_dict = {
+                        "name": span_name,
+                        "context": span_context,
+                        "parent": parent_span_id,
+                        "kind": span_kind,
+                        "start_time": start_time,
+                        "end_time": end_time or start_time,
+                        "attributes": attributes,
+                        "events": events,
+                        "status": status,
+                        "links": [],
+                    }
+                    
+                    otel_spans.append(otel_span_dict)
+                
+                # エクスポーター経由で送信
+                self.otlp_exporter.export(otel_spans)
+                
+                logger.info(f"トレース {trace['trace_id']} をOpenTelemetry Collectorにネイティブエクスポートしました")
+                return True
+            except Exception as e:
+                logger.error(f"OpenTelemetry Collectorへのネイティブエクスポートに失敗しました: {str(e)}")
+                # エラーが発生した場合はHTTP APIでのエクスポートにフォールバック
+        
         try:
-            # OpenTelemetryフォーマットに変換
+            # HTTP APIを使用する場合、OTLPフォーマットに変換
             otlp_trace = self._convert_to_otlp(trace)
             
             # HTTPヘッダー
@@ -796,7 +908,13 @@ class OpenTelemetryExporter:
         # リソース属性の設定
         resource = {
             "attributes": self._convert_attributes_to_otlp_attributes(
-                {"service.name": trace.get("service_name", "unknown")}
+                {
+                    "service.name": trace.get("service_name", "unknown"),
+                    "service.instance.id": trace.get("hostname", "unknown"),
+                    "telemetry.sdk.name": "opentelemetry",
+                    "telemetry.sdk.language": "python",
+                    "telemetry.sdk.version": "1.18.0"
+                }
             )
         }
         
@@ -806,26 +924,40 @@ class OpenTelemetryExporter:
             # サービス名を取得
             service_name = span.get("service_name", trace.get("service_name", "unknown"))
             
+            # スパン種別の決定
+            span_kind = self._get_span_kind(span)
+            
+            # スパンを作成
             otlp_span = {
-                "traceId": trace["trace_id"],
-                "spanId": span["span_id"],
+                "traceId": trace["trace_id"].replace("-", ""),
+                "spanId": span["span_id"].replace("-", ""),
                 "name": span["name"],
-                "kind": self._get_span_kind(span),
-                "startTimeUnixNano": int(span["start_time"] * 1_000_000_000),  # ナノ秒に変換
-                "endTimeUnixNano": int(span["end_time"] * 1_000_000_000) if span["end_time"] else 0,
+                "kind": span_kind,
+                "startTimeUnixNano": str(int(span["start_time"] * 1_000_000_000)),
+                "endTimeUnixNano": str(int(span["end_time"] * 1_000_000_000)) if span.get("end_time") else str(int(span["start_time"] * 1_000_000_000)),
                 "attributes": self._convert_attributes_to_otlp_attributes(span.get("attributes", {})),
                 "events": [],
-                "links": []
+                "links": [],
+                "status": {
+                    "code": "STATUS_CODE_OK"
+                }
             }
             
             # 親スパンの参照を追加
             if span.get("parent_span_id"):
-                otlp_span["parentSpanId"] = span["parent_span_id"]
+                otlp_span["parentSpanId"] = span["parent_span_id"].replace("-", "")
+            
+            # エラー状態の設定
+            if span.get("attributes", {}).get("error", False):
+                otlp_span["status"] = {
+                    "code": "STATUS_CODE_ERROR",
+                    "message": span.get("attributes", {}).get("error.message", "エラーが発生しました")
+                }
             
             # イベントの変換
             for event in span.get("events", []):
                 otlp_span["events"].append({
-                    "timeUnixNano": int(event["timestamp"] * 1_000_000_000),  # ナノ秒に変換
+                    "timeUnixNano": str(int(event["timestamp"] * 1_000_000_000)),
                     "name": event["name"],
                     "attributes": self._convert_attributes_to_otlp_attributes(event.get("attributes", {}))
                 })
@@ -837,10 +969,11 @@ class OpenTelemetryExporter:
             "resourceSpans": [
                 {
                     "resource": resource,
-                    "scopeSpans": [
+                    "instrumentationLibrarySpans": [
                         {
-                            "scope": {
-                                "name": "ai_team_tracer"
+                            "instrumentationLibrary": {
+                                "name": "ai_team_tracer",
+                                "version": "0.1.0"
                             },
                             "spans": spans
                         }
@@ -867,7 +1000,7 @@ class OpenTelemetryExporter:
             if isinstance(value, bool):
                 attribute["value"] = {"boolValue": value}
             elif isinstance(value, int):
-                attribute["value"] = {"intValue": value}
+                attribute["value"] = {"intValue": str(value)}
             elif isinstance(value, float):
                 attribute["value"] = {"doubleValue": value}
             elif isinstance(value, list):
@@ -876,7 +1009,7 @@ class OpenTelemetryExporter:
                 elif all(isinstance(x, bool) for x in value):
                     attribute["value"] = {"arrayValue": {"values": [{"boolValue": x} for x in value]}}
                 elif all(isinstance(x, int) for x in value):
-                    attribute["value"] = {"arrayValue": {"values": [{"intValue": x} for x in value]}}
+                    attribute["value"] = {"arrayValue": {"values": [{"intValue": str(x)} for x in value]}}
                 elif all(isinstance(x, float) for x in value):
                     attribute["value"] = {"arrayValue": {"values": [{"doubleValue": x} for x in value]}}
                 else:
@@ -901,15 +1034,15 @@ class OpenTelemetryExporter:
         span_kind = span.get("attributes", {}).get("span.kind", "internal").lower()
         
         if span_kind == "server":
-            return 2
+            return "SPAN_KIND_SERVER"
         elif span_kind == "client":
-            return 3
+            return "SPAN_KIND_CLIENT"
         elif span_kind == "producer":
-            return 4
+            return "SPAN_KIND_PRODUCER"
         elif span_kind == "consumer":
-            return 5
+            return "SPAN_KIND_CONSUMER"
         else:
-            return 1  # INTERNAL
+            return "SPAN_KIND_INTERNAL"
 
 
 class CloudTraceExporter:

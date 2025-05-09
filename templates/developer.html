@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background-color: #343a40;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+        }
+        .bg-teal {
+            background-color: #20c997;
+            color: white;
+        }
+        .bg-danger-soft {
+            background-color: #f5c2c7;
+        }
+        .task-card {
+            transition: transform 0.2s;
+        }
+        .task-card:hover {
+            transform: translateY(-3px);
+        }
+        .progress {
+            height: 0.8rem;
+        }
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+            border-bottom: 3px solid #20c997;
+        }
+    </style>
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Webシステム開発AIエージェントチーム</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/">ダッシュボード</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/product-owner">プロダクトオーナー</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/hitl-ui/developer">開発者</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/approval-flow">承認フロー</a>
+                    </li>
+                </ul>
+                <span class="navbar-text">
+                    ユーザー: {{ user.username }} | {{ current_time }}
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="container mt-4">
+        <h1 class="mb-4">開発者モニタリングインターフェース</h1>
+        
+        <ul class="nav nav-tabs mb-4">
+            <li class="nav-item">
+                <a class="nav-link active" id="active-tasks-tab" data-bs-toggle="tab" href="#active-tasks">アクティブタスク</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="error-history-tab" data-bs-toggle="tab" href="#error-history">エラー履歴</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="agent-status-tab" data-bs-toggle="tab" href="#agent-status">エージェント状態</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="performance-tab" data-bs-toggle="tab" href="#performance">パフォーマンス</a>
+            </li>
+        </ul>
+        
+        <div class="tab-content">
+            <!-- アクティブタスクタブ -->
+            <div class="tab-pane fade show active" id="active-tasks">
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" id="taskSearchInput" placeholder="タスクを検索...">
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select" id="statusFilter">
+                                <option value="all">全てのステータス</option>
+                                <option value="in_progress">処理中</option>
+                                <option value="waiting_info">情報待ち</option>
+                                <option value="blocked">ブロック</option>
+                                <option value="critical">クリティカル</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if active_tasks %}
+                    <div id="taskCards">
+                        {% for task in active_tasks %}
+                            <div class="card mb-3 task-card" data-status="{{ task.status }}">
+                                <div class="card-header {% if task.status == 'blocked' or task.status == 'critical' %}bg-danger-soft{% elif task.status == 'in_progress' %}bg-teal{% else %}bg-light{% endif %}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h5 class="mb-0">{{ task.recipient }} → {{ task.task_type }}</h5>
+                                        <span class="badge {% if task.status == 'in_progress' %}bg-success{% elif task.status == 'waiting_info' %}bg-warning{% elif task.status == 'blocked' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                            {{ task.status }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ task.task_id }}</h6>
+                                    <p class="card-text">{{ task.description }}</p>
+                                    
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar" role="progressbar" style="width: {{ task.progress * 100 }}%" aria-valuenow="{{ task.progress * 100 }}" aria-valuemin="0" aria-valuemax="100">{{ task.progress * 100 }}%</div>
+                                    </div>
+                                    
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted">開始: {{ task.created_at.split('T')[0] }}</small>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#taskInterventionModal" data-task-id="{{ task.task_id }}">
+                                                介入
+                                            </button>
+                                            <a href="/hitl-ui/task/{{ task.task_id }}" class="btn btn-sm btn-outline-primary">
+                                                詳細
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        現在アクティブなタスクはありません。
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- エラー履歴タブ -->
+            <div class="tab-pane fade" id="error-history">
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="errorSearchInput" placeholder="エラーを検索...">
+                </div>
+                
+                {% if error_history %}
+                    <div class="card">
+                        <div class="card-header bg-danger text-white">
+                            エラー履歴
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>タスクID</th>
+                                            <th>エラーカテゴリ</th>
+                                            <th>重要度</th>
+                                            <th>発生時間</th>
+                                            <th>回復試行</th>
+                                            <th>アクション</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="errorTableBody">
+                                        {% for error in error_history %}
+                                            <tr>
+                                                <td><a href="/hitl-ui/task/{{ error.task_id }}">{{ error.task_id }}</a></td>
+                                                <td>{{ error.category }}</td>
+                                                <td>
+                                                    <span class="badge {% if error.severity == 'CRITICAL' %}bg-danger{% elif error.severity == 'HIGH' %}bg-warning{% else %}bg-info{% endif %}">
+                                                        {{ error.severity }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ error.timestamp.split('T')[0] }} {{ error.timestamp.split('T')[1].split('.')[0] }}</td>
+                                                <td>{{ error.recovery_attempts }} / {{ error.max_retries }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#errorDetailsModal" data-error-id="{{ loop.index }}">
+                                                        詳細
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-success">
+                        記録されているエラーはありません。
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- エージェント状態タブ -->
+            <div class="tab-pane fade" id="agent-status">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                コアエージェント状態
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>エージェント</th>
+                                                <th>状態</th>
+                                                <th>アクティブタスク</th>
+                                                <th>使用リソース</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>PdM</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>1</td>
+                                                <td>
+                                                    <div class="progress" style="width: 100px">
+                                                        <div class="progress-bar" role="progressbar" style="width: 25%" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">25%</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>PM</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>2</td>
+                                                <td>
+                                                    <div class="progress" style="width: 100px">
+                                                        <div class="progress-bar" role="progressbar" style="width: 40%" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100">40%</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>デザイナー</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>1</td>
+                                                <td>
+                                                    <div class="progress" style="width: 100px">
+                                                        <div class="progress-bar" role="progressbar" style="width: 30%" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100">30%</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>PL</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>3</td>
+                                                <td>
+                                                    <div class="progress" style="width: 100px">
+                                                        <div class="progress-bar" role="progressbar" style="width: 60%" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100">60%</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                動的エージェント状態
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>エージェント</th>
+                                                <th>インスタンス数</th>
+                                                <th>状態</th>
+                                                <th>アクション</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>エンジニア</td>
+                                                <td>3</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary">+</button>
+                                                    <button class="btn btn-sm btn-outline-secondary">-</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>テスター</td>
+                                                <td>2</td>
+                                                <td><span class="badge bg-success">オンライン</span></td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary">+</button>
+                                                    <button class="btn btn-sm btn-outline-secondary">-</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>AIアーキテクト</td>
+                                                <td>1</td>
+                                                <td><span class="badge bg-warning">アイドル</span></td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary">+</button>
+                                                    <button class="btn btn-sm btn-outline-secondary">-</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>プロンプトエンジニア</td>
+                                                <td>1</td>
+                                                <td><span class="badge bg-warning">アイドル</span></td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary">+</button>
+                                                    <button class="btn btn-sm btn-outline-secondary">-</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-teal text-white">
+                        システムリソース使用状況
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>CPU使用率</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 45%" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100">45%</div>
+                                </div>
+                                
+                                <h5>メモリ使用率</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-info" role="progressbar" style="width: 60%" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100">60%</div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h5>APIコール（1時間）</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-warning" role="progressbar" style="width: 30%" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100">30%</div>
+                                </div>
+                                
+                                <h5>ストレージ使用率</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 25%" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">25%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- パフォーマンスタブ -->
+            <div class="tab-pane fade" id="performance">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        パフォーマンスメトリクス
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            リアルタイムチャートはこちらに表示されます。現在この機能は開発中です。
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h5>タスク完了率（24時間）</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 85%" aria-valuenow="85" aria-valuemin="0" aria-valuemax="100">85%</div>
+                                </div>
+                                
+                                <h5>平均タスク実行時間</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-info" role="progressbar" style="width: 50%" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">3分42秒</div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h5>エラー率（24時間）</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 15%" aria-valuenow="15" aria-valuemin="0" aria-valuemax="100">15%</div>
+                                </div>
+                                
+                                <h5>タスクキュー長</h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar bg-warning" role="progressbar" style="width: 30%" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100">12タスク</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-teal text-white">
+                        アラート設定
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>メトリクス</th>
+                                        <th>条件</th>
+                                        <th>通知方法</th>
+                                        <th>状態</th>
+                                        <th>アクション</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>エラー率</td>
+                                        <td>> 20%</td>
+                                        <td>メール、Slack</td>
+                                        <td><span class="badge bg-success">有効</span></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary">編集</button>
+                                            <button class="btn btn-sm btn-outline-danger">無効化</button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>タスクキュー長</td>
+                                        <td>> 20</td>
+                                        <td>メール</td>
+                                        <td><span class="badge bg-success">有効</span></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary">編集</button>
+                                            <button class="btn btn-sm btn-outline-danger">無効化</button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>API使用量</td>
+                                        <td>> 90%</td>
+                                        <td>メール、Slack</td>
+                                        <td><span class="badge bg-success">有効</span></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary">編集</button>
+                                            <button class="btn btn-sm btn-outline-danger">無効化</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <button class="btn btn-primary mt-3">
+                            <i class="bi bi-plus-circle"></i> 新しいアラートを追加
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- タスク介入モーダル -->
+    <div class="modal fade" id="taskInterventionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">タスク介入</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="interventionForm">
+                        <input type="hidden" id="interventionTaskId" name="taskId">
+                        
+                        <div class="mb-3">
+                            <label for="interventionAction" class="form-label">アクション</label>
+                            <select class="form-select" id="interventionAction" name="action" required>
+                                <option value="">選択してください</option>
+                                <option value="stop">停止</option>
+                                <option value="restart">再開</option>
+                                <option value="modify">変更</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="interventionComment" class="form-label">コメント</label>
+                            <textarea class="form-control" id="interventionComment" name="comment" rows="3" required></textarea>
+                        </div>
+                        
+                        <div id="modifyDetailsSection" class="mb-3 d-none">
+                            <label for="modifyDetails" class="form-label">変更内容 (JSON形式)</label>
+                            <textarea class="form-control" id="modifyDetails" name="details" rows="5" placeholder='{"priority": "high", "description": "新しい説明..."}'></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="submitIntervention">送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- エラー詳細モーダル -->
+    <div class="modal fade" id="errorDetailsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">エラー詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="errorDetails">
+                        <!-- エラー詳細がJSで表示される -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フィードバックモーダル -->
+    <div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="feedbackModalLabel">操作結果</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="feedbackModalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <div class="container">
+            <p class="mb-0">© 2023 Webシステム開発AIエージェントチーム</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // タスク検索機能
+        document.getElementById('taskSearchInput').addEventListener('input', function() {
+            filterTasks();
+        });
+        
+        // ステータスフィルター
+        document.getElementById('statusFilter').addEventListener('change', function() {
+            filterTasks();
+        });
+        
+        function filterTasks() {
+            const searchTerm = document.getElementById('taskSearchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            const taskCards = document.querySelectorAll('.task-card');
+            
+            taskCards.forEach(card => {
+                const cardText = card.textContent.toLowerCase();
+                const cardStatus = card.getAttribute('data-status');
+                
+                const matchesSearch = cardText.includes(searchTerm);
+                const matchesStatus = statusFilter === 'all' || cardStatus === statusFilter;
+                
+                if (matchesSearch && matchesStatus) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+        
+        // エラー検索機能
+        document.getElementById('errorSearchInput').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const errorRows = document.querySelectorAll('#errorTableBody tr');
+            
+            errorRows.forEach(row => {
+                const rowText = row.textContent.toLowerCase();
+                
+                if (rowText.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+        
+        // タスク介入モーダル
+        document.getElementById('taskInterventionModal').addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const taskId = button.getAttribute('data-task-id');
+            document.getElementById('interventionTaskId').value = taskId;
+        });
+        
+        // 介入アクション選択時の処理
+        document.getElementById('interventionAction').addEventListener('change', function() {
+            const modifySection = document.getElementById('modifyDetailsSection');
+            if (this.value === 'modify') {
+                modifySection.classList.remove('d-none');
+            } else {
+                modifySection.classList.add('d-none');
+            }
+        });
+        
+        // 介入フォーム送信
+        document.getElementById('submitIntervention').addEventListener('click', async function() {
+            const taskId = document.getElementById('interventionTaskId').value;
+            const action = document.getElementById('interventionAction').value;
+            const comment = document.getElementById('interventionComment').value;
+            
+            if (!action || !comment) {
+                alert('アクションとコメントは必須です');
+                return;
+            }
+            
+            const interventionData = {
+                task_id: taskId,
+                action: action,
+                comment: comment
+            };
+            
+            if (action === 'modify') {
+                try {
+                    const detailsText = document.getElementById('modifyDetails').value;
+                    if (detailsText) {
+                        interventionData.details = JSON.parse(detailsText);
+                    }
+                } catch (error) {
+                    alert('変更内容のJSONフォーマットが不正です');
+                    return;
+                }
+            }
+            
+            try {
+                const response = await fetch('/hitl-ui/developer-intervention', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(interventionData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // モーダルを閉じる
+                    bootstrap.Modal.getInstance(document.getElementById('taskInterventionModal')).hide();
+                    
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // ページを更新（変更を反映するため）
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // フィードバックモーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+            }
+        });
+        
+        // エラー詳細モーダル
+        document.getElementById('errorDetailsModal').addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const errorId = button.getAttribute('data-error-id');
+            
+            // 実際にはAPIからエラー詳細を取得する処理となる
+            // ここではサンプルデータを表示
+            const errorDetailsSample = `
+                <div class="card mb-3">
+                    <div class="card-header bg-danger text-white">
+                        エラー情報
+                    </div>
+                    <div class="card-body">
+                        <p><strong>タスクID:</strong> task-${errorId}</p>
+                        <p><strong>エラーメッセージ:</strong> 外部API呼び出し中にタイムアウトが発生しました。</p>
+                        <p><strong>エラーカテゴリ:</strong> API_ERROR</p>
+                        <p><strong>重要度:</strong> HIGH</p>
+                        <p><strong>発生時間:</strong> 2023-10-30 14:23:45</p>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-info text-white">
+                        回復試行履歴
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>試行番号</th>
+                                    <th>時間</th>
+                                    <th>戦略</th>
+                                    <th>結果</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>1</td>
+                                    <td>2023-10-30 14:23:50</td>
+                                    <td>再試行 (指数バックオフ)</td>
+                                    <td><span class="badge bg-danger">失敗</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2</td>
+                                    <td>2023-10-30 14:24:10</td>
+                                    <td>再試行 (指数バックオフ)</td>
+                                    <td><span class="badge bg-danger">失敗</span></td>
+                                </tr>
+                                <tr>
+                                    <td>3</td>
+                                    <td>2023-10-30 14:24:50</td>
+                                    <td>代替API使用</td>
+                                    <td><span class="badge bg-success">成功</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <strong>解決策:</strong> 代替APIを使用して処理を継続しました。問題は解決済みですが、API健全性チェックを実施することをお勧めします。
+                </div>
+            `;
+            
+            document.getElementById('errorDetails').innerHTML = errorDetailsSample;
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background-color: #343a40;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+        }
+        .status-approved {
+            background-color: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        .status-rejected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+        .status-pending {
+            background-color: #fff3cd;
+            color: #856404;
+            border-color: #ffeeba;
+        }
+        .status-badge {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.65rem;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 40px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: #dee2e6;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+        .timeline-badge {
+            position: absolute;
+            left: -40px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            background-color: #6c757d;
+            color: white;
+            font-size: 14px;
+            line-height: 24px;
+        }
+        .timeline-badge-info {
+            background-color: #17a2b8;
+        }
+        .timeline-badge-warning {
+            background-color: #ffc107;
+        }
+        .timeline-badge-success {
+            background-color: #28a745;
+        }
+        .timeline-badge-danger {
+            background-color: #dc3545;
+        }
+        .timeline-badge-primary {
+            background-color: #007bff;
+        }
+        .timeline-content {
+            margin-left: 10px;
+        }
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            white-space: pre-wrap;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error-box {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 1rem;
+        }
+        .metadata-table th {
+            width: 40%;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Webシステム開発AIエージェントチーム</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/">ダッシュボード</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/product-owner">プロダクトオーナー</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/developer">開発者</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/approval-flow">承認フロー</a>
+                    </li>
+                </ul>
+                <span class="navbar-text">
+                    ユーザー: {{ user.username }} | {{ current_time }}
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>タスク詳細: {{ task.task_id }}</h1>
+            <div>
+                {% if task.approved_by_pm %}
+                    <span class="badge status-badge status-approved">承認済み</span>
+                {% elif task.rejected_by_pm %}
+                    <span class="badge status-badge status-rejected">拒否</span>
+                {% else %}
+                    <span class="badge status-badge status-pending">承認待ち</span>
+                {% endif %}
+                
+                <span class="badge bg-{{ 'success' if task.status == 'completed' else 'warning' if task.status == 'in_progress' else 'danger' if task.status == 'failed' else 'secondary' }}">
+                    {{ task.status }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <!-- タスク情報 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        タスク情報
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ task.context.title if task.context and 'title' in task.context else task.task_type }}</h5>
+                        <div class="mb-4">
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{{ 'success' if task.status == 'completed' else 'warning' if task.status == 'in_progress' else 'danger' if task.status == 'failed' else 'secondary' }}" 
+                                     role="progressbar" 
+                                     style="width: {{ task.progress * 100 }}%" 
+                                     aria-valuenow="{{ task.progress * 100 }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ (task.progress * 100)|int }}%
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h6 class="fw-bold mb-3">説明:</h6>
+                        <p class="card-text">{{ task.description }}</p>
+                        
+                        <table class="table table-bordered metadata-table">
+                            <tbody>
+                                <tr>
+                                    <th>タスク種別</th>
+                                    <td>{{ task.task_type }}</td>
+                                </tr>
+                                <tr>
+                                    <th>送信者</th>
+                                    <td>{{ task.sender }}</td>
+                                </tr>
+                                <tr>
+                                    <th>受信者</th>
+                                    <td>{{ task.recipient }}</td>
+                                </tr>
+                                <tr>
+                                    <th>作成日時</th>
+                                    <td>{{ task.created_at }}</td>
+                                </tr>
+                                <tr>
+                                    <th>更新日時</th>
+                                    <td>{{ task.updated_at }}</td>
+                                </tr>
+                                {% if task.approved_by_pm %}
+                                <tr>
+                                    <th>承認者</th>
+                                    <td>{{ task.approved_by }}</td>
+                                </tr>
+                                <tr>
+                                    <th>承認日時</th>
+                                    <td>{{ task.approved_time }}</td>
+                                </tr>
+                                {% elif task.rejected_by_pm %}
+                                <tr>
+                                    <th>拒否者</th>
+                                    <td>{{ task.rejected_by }}</td>
+                                </tr>
+                                <tr>
+                                    <th>拒否日時</th>
+                                    <td>{{ task.rejected_time }}</td>
+                                </tr>
+                                <tr>
+                                    <th>拒否理由</th>
+                                    <td>{{ task.rejection_reason }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                        
+                        <!-- タスク固有のコンテキスト情報 -->
+                        {% if task.context %}
+                        <h6 class="fw-bold mt-4 mb-3">コンテキスト情報:</h6>
+                        <div class="accordion" id="contextAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingContext">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseContext" aria-expanded="false" aria-controls="collapseContext">
+                                        コンテキスト詳細を表示
+                                    </button>
+                                </h2>
+                                <div id="collapseContext" class="accordion-collapse collapse" aria-labelledby="headingContext" data-bs-parent="#contextAccordion">
+                                    <div class="accordion-body">
+                                        <pre>{{ task.context|pprint }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- エラー履歴 -->
+                {% if error_history %}
+                <div class="card mb-4">
+                    <div class="card-header bg-danger text-white">
+                        エラー履歴
+                    </div>
+                    <div class="card-body">
+                        {% for error in error_history %}
+                            <div class="error-box mb-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title">{{ error.category }}</h6>
+                                    <span class="badge bg-{{ 'danger' if error.severity == 'CRITICAL' else 'warning' if error.severity == 'HIGH' else 'info' }}">
+                                        {{ error.severity }}
+                                    </span>
+                                </div>
+                                <p>{{ error.message }}</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">発生時間: {{ error.timestamp }}</small>
+                                    <small>回復試行: {{ error.recovery_attempts }}/{{ error.max_retries }}</small>
+                                </div>
+                                {% if error.recovery_attempts > 0 %}
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#recoveryDetails{{ loop.index }}">
+                                            回復試行の詳細を表示
+                                        </button>
+                                        <div class="collapse mt-2" id="recoveryDetails{{ loop.index }}">
+                                            <div class="card card-body">
+                                                <ul class="list-group list-group-flush">
+                                                    {% for attempt in error.recovery_history %}
+                                                        <li class="list-group-item">
+                                                            <strong>試行 {{ loop.index }}</strong> ({{ attempt.timestamp }}): 
+                                                            {{ attempt.strategy }} - 
+                                                            <span class="badge bg-{{ 'success' if attempt.successful else 'danger' }}">
+                                                                {{ '成功' if attempt.successful else '失敗' }}
+                                                            </span>
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- フィードバックフォーム -->
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        タスクフィードバック
+                    </div>
+                    <div class="card-body">
+                        <form id="feedbackForm">
+                            <input type="hidden" name="task_id" value="{{ task.task_id }}">
+                            
+                            <div class="mb-3">
+                                <label for="feedbackType" class="form-label">フィードバックタイプ</label>
+                                <select class="form-select" id="feedbackType" name="feedback_type" required>
+                                    <option value="">選択してください</option>
+                                    <option value="quality">品質</option>
+                                    <option value="speed">速度</option>
+                                    <option value="accuracy">正確性</option>
+                                    <option value="other">その他</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">評価</label>
+                                <div class="d-flex">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="rating" id="rating1" value="1" required>
+                                        <label class="form-check-label" for="rating1">1</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="rating" id="rating2" value="2">
+                                        <label class="form-check-label" for="rating2">2</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="rating" id="rating3" value="3">
+                                        <label class="form-check-label" for="rating3">3</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="rating" id="rating4" value="4">
+                                        <label class="form-check-label" for="rating4">4</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="rating" id="rating5" value="5">
+                                        <label class="form-check-label" for="rating5">5</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="comment" class="form-label">コメント (オプション)</label>
+                                <textarea class="form-control" id="comment" name="comment" rows="3"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">フィードバックを送信</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <!-- タスク履歴 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        タスク履歴
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-primary">
+                                    <i class="bi bi-plus"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>タスク作成</h6>
+                                    <p class="text-muted mb-0"><small>{{ task.created_at }}</small></p>
+                                    <p><small>{{ task.sender }} から {{ task.recipient }} へ</small></p>
+                                </div>
+                            </div>
+                            
+                            {% if task.approved_by_pm %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-success">
+                                    <i class="bi bi-check"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>タスク承認</h6>
+                                    <p class="text-muted mb-0"><small>{{ task.approved_time }}</small></p>
+                                    <p><small>{{ task.approved_by }} により承認</small></p>
+                                </div>
+                            </div>
+                            {% elif task.rejected_by_pm %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-danger">
+                                    <i class="bi bi-x"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>タスク拒否</h6>
+                                    <p class="text-muted mb-0"><small>{{ task.rejected_time }}</small></p>
+                                    <p><small>{{ task.rejected_by }} により拒否</small></p>
+                                    <p class="text-danger"><small>理由: {{ task.rejection_reason }}</small></p>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- ステータス更新 -->
+                            {% if task.status_updates %}
+                            {% for update in task.status_updates %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-info">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>ステータス更新</h6>
+                                    <p class="text-muted mb-0"><small>{{ update.timestamp }}</small></p>
+                                    <p><small>{{ update.status }} ({{ update.progress * 100 }}%)</small></p>
+                                    {% if update.message %}
+                                    <p><small>{{ update.message }}</small></p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+                            
+                            <!-- エラーイベント -->
+                            {% if error_history %}
+                            {% for error in error_history %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-danger">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>エラー発生</h6>
+                                    <p class="text-muted mb-0"><small>{{ error.timestamp }}</small></p>
+                                    <p><small>{{ error.category }} - {{ error.severity }}</small></p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+                            
+                            <!-- 完了イベント -->
+                            {% if task.status == 'completed' %}
+                            <div class="timeline-item">
+                                <div class="timeline-badge timeline-badge-success">
+                                    <i class="bi bi-check-circle"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6>タスク完了</h6>
+                                    <p class="text-muted mb-0"><small>{{ task.completed_at if task.completed_at else task.updated_at }}</small></p>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- アクション -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        タスクアクション
+                    </div>
+                    <div class="card-body">
+                        {% if not task.approved_by_pm and not task.rejected_by_pm and user.roles and ('PM' in user.roles or 'ADMIN' in user.roles) %}
+                            <form id="approvalActionForm" class="mb-3">
+                                <div class="mb-3">
+                                    <label for="approvalComment" class="form-label">コメント (オプション)</label>
+                                    <textarea class="form-control" id="approvalComment" name="comment" rows="2"></textarea>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-success" id="approveTaskBtn" data-task-id="{{ task.task_id }}">承認</button>
+                                    <button type="button" class="btn btn-danger" id="rejectTaskBtn" data-task-id="{{ task.task_id }}">拒否</button>
+                                </div>
+                            </form>
+                            <hr>
+                        {% endif %}
+                        
+                        <div class="d-grid gap-2">
+                            {% if task.status == 'in_progress' or task.status == 'waiting_info' %}
+                                <button type="button" class="btn btn-warning intervention-btn" data-action="stop" data-task-id="{{ task.task_id }}">
+                                    <i class="bi bi-pause-fill"></i> タスクを停止
+                                </button>
+                            {% elif task.status == 'stopped' %}
+                                <button type="button" class="btn btn-success intervention-btn" data-action="restart" data-task-id="{{ task.task_id }}">
+                                    <i class="bi bi-play-fill"></i> タスクを再開
+                                </button>
+                            {% endif %}
+                            
+                            <button type="button" class="btn btn-outline-secondary intervention-btn" data-action="modify" data-task-id="{{ task.task_id }}">
+                                <i class="bi bi-pencil"></i> タスクを変更
+                            </button>
+                            
+                            <a href="{{ request.url.path.replace('/task/', '/') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-arrow-left"></i> 戻る
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 拒否理由モーダル -->
+    <div class="modal fade" id="rejectReasonModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">拒否理由</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="rejectForm">
+                        <input type="hidden" id="rejectTaskId" name="task_id">
+                        <input type="hidden" id="rejectComment" name="comment">
+                        
+                        <div class="mb-3">
+                            <label for="rejectReason" class="form-label">このタスクを拒否する理由を入力してください</label>
+                            <textarea class="form-control" id="rejectReason" name="reason" rows="3" required></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-danger" id="confirmReject">拒否を確定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- タスク介入モーダル -->
+    <div class="modal fade" id="taskInterventionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">タスク介入</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="interventionForm">
+                        <input type="hidden" id="interventionTaskId" name="taskId">
+                        <input type="hidden" id="interventionAction" name="action">
+                        
+                        <div class="mb-3">
+                            <label for="interventionComment" class="form-label">コメント</label>
+                            <textarea class="form-control" id="interventionComment" name="comment" rows="3" required></textarea>
+                        </div>
+                        
+                        <div id="modifyDetailsSection" class="mb-3 d-none">
+                            <label for="modifyDetails" class="form-label">変更内容 (JSON形式)</label>
+                            <textarea class="form-control" id="modifyDetails" name="details" rows="5" placeholder='{"priority": "high", "description": "新しい説明..."}'></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="submitIntervention">送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フィードバックモーダル -->
+    <div class="modal fade" id="feedbackResultModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="feedbackModalLabel">操作結果</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="feedbackModalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <div class="container">
+            <p class="mb-0">© 2023 Webシステム開発AIエージェントチーム</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 承認ボタンのイベントハンドラ
+        document.getElementById('approveTaskBtn')?.addEventListener('click', async function() {
+            const taskId = this.getAttribute('data-task-id');
+            const comment = document.getElementById('approvalComment').value;
+            
+            try {
+                const formData = new FormData();
+                formData.append('comment', comment);
+                
+                const response = await fetch(`/hitl-ui/approve-task/${taskId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // ページを更新（変更を反映するため）
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // モーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            }
+        });
+        
+        // 拒否ボタンのイベントハンドラ
+        document.getElementById('rejectTaskBtn')?.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            const comment = document.getElementById('approvalComment').value;
+            
+            // モーダルにタスクIDとコメントを設定
+            document.getElementById('rejectTaskId').value = taskId;
+            document.getElementById('rejectComment').value = comment;
+            
+            // 拒否理由モーダルを表示
+            new bootstrap.Modal(document.getElementById('rejectReasonModal')).show();
+        });
+        
+        // 拒否確定ボタンのイベントハンドラ
+        document.getElementById('confirmReject')?.addEventListener('click', async function() {
+            const taskId = document.getElementById('rejectTaskId').value;
+            const comment = document.getElementById('rejectComment').value;
+            const reason = document.getElementById('rejectReason').value;
+            
+            if (!reason.trim()) {
+                alert('拒否理由は必須です');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('reason', reason);
+                if (comment) {
+                    formData.append('comment', comment);
+                }
+                
+                const response = await fetch(`/hitl-ui/reject-task/${taskId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // 拒否理由モーダルを閉じる
+                bootstrap.Modal.getInstance(document.getElementById('rejectReasonModal')).hide();
+                
+                if (response.ok) {
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // ページを更新（変更を反映するため）
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // フィードバックモーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            }
+        });
+        
+        // タスク介入ボタンのイベントハンドラ
+        document.querySelectorAll('.intervention-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                const action = this.getAttribute('data-action');
+                
+                // モーダルにタスクIDとアクションを設定
+                document.getElementById('interventionTaskId').value = taskId;
+                document.getElementById('interventionAction').value = action;
+                
+                // 変更の場合は変更詳細セクションを表示
+                const modifyDetailsSection = document.getElementById('modifyDetailsSection');
+                if (action === 'modify') {
+                    modifyDetailsSection.classList.remove('d-none');
+                } else {
+                    modifyDetailsSection.classList.add('d-none');
+                }
+                
+                // 介入モーダルを表示
+                new bootstrap.Modal(document.getElementById('taskInterventionModal')).show();
+            });
+        });
+        
+        // 介入フォーム送信
+        document.getElementById('submitIntervention')?.addEventListener('click', async function() {
+            const taskId = document.getElementById('interventionTaskId').value;
+            const action = document.getElementById('interventionAction').value;
+            const comment = document.getElementById('interventionComment').value;
+            
+            if (!comment) {
+                alert('コメントは必須です');
+                return;
+            }
+            
+            const interventionData = {
+                task_id: taskId,
+                action: action,
+                comment: comment
+            };
+            
+            if (action === 'modify') {
+                try {
+                    const detailsText = document.getElementById('modifyDetails').value;
+                    if (detailsText) {
+                        interventionData.details = JSON.parse(detailsText);
+                    } else {
+                        alert('変更内容は必須です');
+                        return;
+                    }
+                } catch (error) {
+                    alert('変更内容のJSONフォーマットが不正です');
+                    return;
+                }
+            }
+            
+            try {
+                const response = await fetch('/hitl-ui/developer-intervention', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(interventionData)
+                });
+                
+                const result = await response.json();
+                
+                // 介入モーダルを閉じる
+                bootstrap.Modal.getInstance(document.getElementById('taskInterventionModal')).hide();
+                
+                if (response.ok) {
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // ページを更新（変更を反映するため）
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // フィードバックモーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            }
+        });
+        
+        // フィードバックフォーム送信
+        document.getElementById('feedbackForm')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                task_id: this.querySelector('input[name="task_id"]').value,
+                feedback_type: this.querySelector('select[name="feedback_type"]').value,
+                rating: parseInt(this.querySelector('input[name="rating"]:checked')?.value),
+                comment: this.querySelector('textarea[name="comment"]').value
+            };
+            
+            if (!formData.feedback_type || !formData.rating) {
+                alert('フィードバックタイプと評価は必須です');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/hitl/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // フォームリセット
+                    this.reset();
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // フィードバックモーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackResultModal')).show();
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background-color: #343a40;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+        }
+        .bg-orange {
+            background-color: #fd7e14;
+            color: white;
+        }
+        .task-card {
+            transition: transform 0.2s;
+        }
+        .task-card:hover {
+            transform: translateY(-3px);
+        }
+        .badge-pending {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .badge-approved {
+            background-color: #28a745;
+            color: white;
+        }
+        .badge-rejected {
+            background-color: #dc3545;
+            color: white;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: #dee2e6;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+        .timeline-badge {
+            position: absolute;
+            left: -30px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            text-align: center;
+            background-color: #6c757d;
+            color: white;
+            font-size: 12px;
+            line-height: 20px;
+        }
+        .timeline-badge-pending {
+            background-color: #ffc107;
+        }
+        .timeline-badge-approved {
+            background-color: #28a745;
+        }
+        .timeline-badge-rejected {
+            background-color: #dc3545;
+        }
+        .timeline-content {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Webシステム開発AIエージェントチーム</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/">ダッシュボード</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/product-owner">プロダクトオーナー</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hitl-ui/developer">開発者</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/hitl-ui/approval-flow">承認フロー</a>
+                    </li>
+                </ul>
+                <span class="navbar-text">
+                    ユーザー: {{ user.username }} | {{ current_time }}
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="container mt-4">
+        <h1 class="mb-4">承認フローインターフェース</h1>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <!-- 承認待ちタスク -->
+                <div class="card mb-4">
+                    <div class="card-header bg-orange">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-white">承認待ちタスク</h5>
+                            <span class="badge bg-light text-dark">{{ pending_approvals|length }} 件</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% if pending_approvals %}
+                            {% for task in pending_approvals %}
+                                <div class="card mb-3 task-card">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <h5 class="card-title">{{ task.context.title if task.context.title else task.task_type }}</h5>
+                                            <span class="badge badge-pending">承認待ち</span>
+                                        </div>
+                                        <p class="card-text">{{ task.description }}</p>
+                                        
+                                        <div class="mb-3">
+                                            <strong>送信者:</strong> {{ task.sender }}<br>
+                                            <strong>受信者:</strong> {{ task.recipient }}<br>
+                                            <strong>タスク種別:</strong> {{ task.task_type }}<br>
+                                            <strong>作成日時:</strong> {{ task.created_at.split('T')[0] }} {{ task.created_at.split('T')[1].split('.')[0] }}
+                                        </div>
+                                        
+                                        <hr>
+                                        
+                                        <form id="approvalForm{{ loop.index }}" class="approval-form">
+                                            <input type="hidden" name="task_id" value="{{ task.task_id }}">
+                                            <div class="mb-3">
+                                                <label for="comment{{ loop.index }}" class="form-label">コメント (オプション)</label>
+                                                <textarea class="form-control" id="comment{{ loop.index }}" name="comment" rows="2"></textarea>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <a href="/hitl-ui/task/{{ task.task_id }}" class="btn btn-outline-secondary">
+                                                    詳細を表示
+                                                </a>
+                                                <div>
+                                                    <button type="button" class="btn btn-danger reject-btn" data-task-id="{{ task.task_id }}" data-form-id="approvalForm{{ loop.index }}">
+                                                        拒否
+                                                    </button>
+                                                    <button type="button" class="btn btn-success approve-btn" data-task-id="{{ task.task_id }}" data-form-id="approvalForm{{ loop.index }}">
+                                                        承認
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="alert alert-info">
+                                現在、承認待ちのタスクはありません。
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <!-- サマリーと統計 -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        承認統計
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>承認待ち</div>
+                            <span class="badge badge-pending">{{ pending_approvals|length }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>承認済み (今日)</div>
+                            <span class="badge badge-approved">{{ recent_approved|selectattr('approved_time', 'defined')|selectattr('approved_time', 'contains', current_time.split(' ')[0])|list|length }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>拒否 (今日)</div>
+                            <span class="badge badge-rejected">{{ recent_approved|selectattr('rejected_time', 'defined')|selectattr('rejected_time', 'contains', current_time.split(' ')[0])|list|length }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>平均承認時間</div>
+                            <span>2.5 時間</span>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="text-center">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-primary active">日次</button>
+                                <button type="button" class="btn btn-outline-primary">週次</button>
+                                <button type="button" class="btn btn-outline-primary">月次</button>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3 text-center">
+                            詳細グラフは開発中です
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 承認履歴 -->
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        最近の承認アクティビティ
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="timeline p-3">
+                            {% for task in recent_approved %}
+                                <div class="timeline-item">
+                                    <div class="timeline-badge {% if task.approved_by_pm %}timeline-badge-approved{% elif task.rejected_by_pm %}timeline-badge-rejected{% else %}timeline-badge-pending{% endif %}">
+                                        <i class="bi {% if task.approved_by_pm %}bi-check{% elif task.rejected_by_pm %}bi-x{% else %}bi-clock{% endif %}"></i>
+                                    </div>
+                                    <div class="timeline-content">
+                                        <h6>
+                                            {{ task.context.title if task.context.title else task.task_type }}
+                                            <span class="badge {% if task.approved_by_pm %}badge-approved{% elif task.rejected_by_pm %}badge-rejected{% else %}badge-pending{% endif %}">
+                                                {% if task.approved_by_pm %}承認済み{% elif task.rejected_by_pm %}拒否{% else %}保留中{% endif %}
+                                            </span>
+                                        </h6>
+                                        <p class="text-muted mb-1">{{ task.task_id }}</p>
+                                        {% if task.approved_by_pm %}
+                                            <p class="mb-0"><small>{{ task.approved_by }} により承認 - {{ task.approved_time }}</small></p>
+                                        {% elif task.rejected_by_pm %}
+                                            <p class="mb-0"><small>{{ task.rejected_by }} により拒否 - {{ task.rejected_time }}</small></p>
+                                            <p class="mb-0 text-danger"><small>理由: {{ task.rejection_reason }}</small></p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 拒否理由モーダル -->
+    <div class="modal fade" id="rejectReasonModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">拒否理由</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="rejectForm">
+                        <input type="hidden" id="rejectTaskId" name="task_id">
+                        <input type="hidden" id="rejectComment" name="comment">
+                        
+                        <div class="mb-3">
+                            <label for="rejectReason" class="form-label">このタスクを拒否する理由を入力してください</label>
+                            <textarea class="form-control" id="rejectReason" name="reason" rows="3" required></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-danger" id="confirmReject">拒否を確定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フィードバックモーダル -->
+    <div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="feedbackModalLabel">操作結果</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="feedbackModalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フッター -->
+    <footer class="bg-dark text-white text-center py-3 mt-5">
+        <div class="container">
+            <p class="mb-0">© 2023 Webシステム開発AIエージェントチーム</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 承認ボタンのイベントハンドラ
+        document.querySelectorAll('.approve-btn').forEach(button => {
+            button.addEventListener('click', async function() {
+                const taskId = this.getAttribute('data-task-id');
+                const formId = this.getAttribute('data-form-id');
+                const form = document.getElementById(formId);
+                const formData = new FormData(form);
+                
+                try {
+                    const response = await fetch(`/hitl-ui/approve-task/${taskId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        // フィードバックを表示
+                        document.getElementById('feedbackModalBody').innerHTML = `
+                            <div class="alert alert-success">
+                                ${result.message}
+                            </div>
+                        `;
+                        
+                        // モーダルを表示
+                        new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+                        
+                        // ページを更新（変更を反映するため）
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        document.getElementById('feedbackModalBody').innerHTML = `
+                            <div class="alert alert-danger">
+                                エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                            </div>
+                        `;
+                        new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            通信エラーが発生しました。再度お試しください。
+                        </div>
+                    `;
+                    new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+                }
+            });
+        });
+        
+        // 拒否ボタンのイベントハンドラ
+        document.querySelectorAll('.reject-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const taskId = this.getAttribute('data-task-id');
+                const formId = this.getAttribute('data-form-id');
+                const form = document.getElementById(formId);
+                const comment = form.querySelector('textarea[name="comment"]').value;
+                
+                // モーダルにタスクIDとコメントを設定
+                document.getElementById('rejectTaskId').value = taskId;
+                document.getElementById('rejectComment').value = comment;
+                
+                // 拒否理由モーダルを表示
+                new bootstrap.Modal(document.getElementById('rejectReasonModal')).show();
+            });
+        });
+        
+        // 拒否確定ボタンのイベントハンドラ
+        document.getElementById('confirmReject').addEventListener('click', async function() {
+            const taskId = document.getElementById('rejectTaskId').value;
+            const comment = document.getElementById('rejectComment').value;
+            const reason = document.getElementById('rejectReason').value;
+            
+            if (!reason.trim()) {
+                alert('拒否理由は必須です');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('reason', reason);
+                if (comment) {
+                    formData.append('comment', comment);
+                }
+                
+                const response = await fetch(`/hitl-ui/reject-task/${taskId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // 拒否理由モーダルを閉じる
+                bootstrap.Modal.getInstance(document.getElementById('rejectReasonModal')).hide();
+                
+                if (response.ok) {
+                    // フィードバックを表示
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-success">
+                            ${result.message}
+                        </div>
+                    `;
+                    
+                    // ページを更新（変更を反映するため）
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    document.getElementById('feedbackModalBody').innerHTML = `
+                        <div class="alert alert-danger">
+                            エラー: ${result.detail || 'リクエストの処理中にエラーが発生しました'}
+                        </div>
+                    `;
+                }
+                
+                // フィードバックモーダルを表示
+                new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('feedbackModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        通信エラーが発生しました。再度お試しください。
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -755,6 +755,7 @@ class MetricsCollector:
         self.stop_events = {}
         self.collection_threads = {}
         self.hostname = socket.gethostname()
+        self.custom_metrics_definitions = {}
         
         # システムメトリクス定義を登録
         self._register_system_metrics()
@@ -778,6 +779,228 @@ class MetricsCollector:
         self.collectors[name] = collector_func
         self.storage.store_metric_definition(metric_definition)
         self.collection_intervals[name] = collection_interval
+    
+    def define_custom_metric(
+        self,
+        name: str,
+        description: str,
+        metric_type: MetricType,
+        unit: MetricUnit = MetricUnit.CUSTOM,
+        labels: Optional[List[str]] = None,
+        aggregation_period: Optional[int] = None,
+        collection_interval: int = 60,
+        collector_func: Optional[Callable[[], Union[float, int, List[float]]]] = None
+    ) -> MetricDefinition:
+        """
+        カスタムメトリクスを定義します
+        
+        Args:
+            name: メトリクス名
+            description: メトリクスの説明
+            metric_type: メトリクスの種類
+            unit: メトリクスの単位
+            labels: メトリクスに付与するラベル（ディメンション）
+            aggregation_period: 集計期間（秒単位、Noneの場合は集計なし）
+            collection_interval: 収集間隔（秒）
+            collector_func: メトリクス収集関数（Noneの場合は後で設定）
+            
+        Returns:
+            MetricDefinition: 作成されたメトリクス定義
+        """
+        # メトリクス定義を作成
+        metric_definition = MetricDefinition(
+            name=name,
+            description=description,
+            metric_type=metric_type,
+            unit=unit,
+            labels=labels,
+            aggregation_period=aggregation_period
+        )
+        
+        # ストレージに保存
+        self.storage.store_metric_definition(metric_definition)
+        
+        # 内部マップに追加
+        self.custom_metrics_definitions[name] = metric_definition
+        
+        # 収集関数が指定されている場合は登録
+        if collector_func:
+            self.collectors[name] = collector_func
+            self.collection_intervals[name] = collection_interval
+        
+        logger.info(f"カスタムメトリクス {name} を定義しました。タイプ: {metric_type.value}, 単位: {unit.value}")
+        return metric_definition
+    
+    def set_custom_metric_collector(
+        self,
+        name: str,
+        collector_func: Callable[[], Union[float, int, List[float]]],
+        collection_interval: int = 60
+    ) -> bool:
+        """
+        既存のカスタムメトリクスに収集関数を設定します
+        
+        Args:
+            name: メトリクス名
+            collector_func: メトリクス収集関数
+            collection_interval: 収集間隔（秒）
+            
+        Returns:
+            bool: 設定に成功した場合はTrue
+        """
+        # メトリクスが存在するか確認
+        if name not in self.custom_metrics_definitions:
+            logger.warning(f"メトリクス {name} は定義されていません。先にdefine_custom_metricを呼び出してください。")
+            return False
+        
+        # 収集関数と間隔を設定
+        self.collectors[name] = collector_func
+        self.collection_intervals[name] = collection_interval
+        
+        logger.info(f"メトリクス {name} に収集関数を設定しました。収集間隔: {collection_interval}秒")
+        return True
+    
+    def update_custom_metric_definition(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        metric_type: Optional[MetricType] = None,
+        unit: Optional[MetricUnit] = None,
+        labels: Optional[List[str]] = None,
+        aggregation_period: Optional[int] = None
+    ) -> bool:
+        """
+        カスタムメトリクスの定義を更新します
+        
+        Args:
+            name: メトリクス名
+            description: メトリクスの説明（Noneの場合は変更なし）
+            metric_type: メトリクスの種類（Noneの場合は変更なし）
+            unit: メトリクスの単位（Noneの場合は変更なし）
+            labels: メトリクスに付与するラベル（Noneの場合は変更なし）
+            aggregation_period: 集計期間（Noneの場合は変更なし）
+            
+        Returns:
+            bool: 更新に成功した場合はTrue
+        """
+        # メトリクスが存在するか確認
+        if name not in self.custom_metrics_definitions:
+            logger.warning(f"メトリクス {name} は定義されていません。更新できません。")
+            return False
+        
+        # 現在の定義を取得
+        current_definition = self.custom_metrics_definitions[name]
+        
+        # 更新された値で新しい定義を作成
+        updated_definition = MetricDefinition(
+            name=name,
+            description=description if description is not None else current_definition.description,
+            metric_type=metric_type if metric_type is not None else current_definition.metric_type,
+            unit=unit if unit is not None else current_definition.unit,
+            labels=labels if labels is not None else current_definition.labels,
+            aggregation_period=aggregation_period if aggregation_period is not None else current_definition.aggregation_period
+        )
+        
+        # ストレージに保存
+        self.storage.store_metric_definition(updated_definition)
+        
+        # 内部マップを更新
+        self.custom_metrics_definitions[name] = updated_definition
+        
+        logger.info(f"カスタムメトリクス {name} の定義を更新しました")
+        return True
+    
+    def delete_custom_metric(self, name: str) -> bool:
+        """
+        カスタムメトリクスを削除します
+        
+        Args:
+            name: メトリクス名
+            
+        Returns:
+            bool: 削除に成功した場合はTrue
+        """
+        # メトリクスが存在するか確認
+        if name not in self.custom_metrics_definitions:
+            logger.warning(f"メトリクス {name} は定義されていません。削除できません。")
+            return False
+        
+        # 実行中のコレクターがあれば停止
+        if name in self.stop_events:
+            self.stop_collector(name)
+        
+        # 内部マップから削除
+        if name in self.collectors:
+            del self.collectors[name]
+        
+        if name in self.collection_intervals:
+            del self.collection_intervals[name]
+        
+        if name in self.custom_metrics_definitions:
+            del self.custom_metrics_definitions[name]
+        
+        # データベースからの削除はサポートしていないため、
+        # メトリクス定義と値は履歴として残ります
+        
+        logger.info(f"カスタムメトリクス {name} を削除しました")
+        return True
+    
+    def get_custom_metric_definitions(self) -> Dict[str, MetricDefinition]:
+        """
+        すべてのカスタムメトリクス定義を取得します
+        
+        Returns:
+            Dict[str, MetricDefinition]: メトリクス名をキーとする定義の辞書
+        """
+        return self.custom_metrics_definitions.copy()
+    
+    def record_custom_metric_value(
+        self, 
+        name: str, 
+        value: Union[float, int, List[float]],
+        labels: Optional[Dict[str, str]] = None
+    ) -> bool:
+        """
+        カスタムメトリクスの値を記録します
+        
+        Args:
+            name: メトリクス名
+            value: メトリクス値
+            labels: 追加のラベル
+            
+        Returns:
+            bool: 記録に成功した場合はTrue
+        """
+        # メトリクスが存在するか確認
+        if name not in self.custom_metrics_definitions:
+            logger.warning(f"メトリクス {name} は定義されていません。値を記録できません。")
+            return False
+        
+        # メトリクス定義を取得
+        definition = self.custom_metrics_definitions[name]
+        
+        # メトリクスタイプに応じた記録方法を選択
+        try:
+            all_labels = {"host": self.hostname}
+            if labels:
+                all_labels.update(labels)
+            
+            if definition.metric_type == MetricType.COUNTER:
+                increment_counter(name, all_labels, int(value) if not isinstance(value, list) else sum(value))
+            elif definition.metric_type == MetricType.GAUGE:
+                record_gauge(name, value if not isinstance(value, list) else sum(value) / len(value), all_labels)
+            elif definition.metric_type == MetricType.HISTOGRAM or definition.metric_type == MetricType.SUMMARY:
+                if isinstance(value, list):
+                    for v in value:
+                        record_histogram(name, v, all_labels)
+                else:
+                    record_histogram(name, value, all_labels)
+            
+            logger.debug(f"メトリクス {name} に値 {value} を記録しました")
+            return True
+        except Exception as e:
+            logger.error(f"メトリクス {name} の値記録中にエラーが発生しました: {str(e)}")
+            return False
     
     def start_collector(self, name: str):
         """
